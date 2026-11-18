@@ -32,7 +32,10 @@ jobs:
       - name: Install Android API 37 platform
         run: |
           echo "Android SDK: ${ANDROID_HOME}"
-          sdkmanager --install 'platforms;android-37'
+          SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -print -quit)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install 'platforms;android-37'
 
       - name: Build installable debug APK
         run: gradle --no-daemon --stacktrace :app:assembleDebug
