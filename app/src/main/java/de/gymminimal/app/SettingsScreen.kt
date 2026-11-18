@@ -30,7 +30,9 @@ fun SettingsScreen(
     onImport: () -> Unit,
     onChooseFolder: () -> Unit,
     onRestore: (File) -> Unit,
-    onReset: () -> Unit
+    onReset: () -> Unit,
+    onCheckUpdates: () -> Unit,
+    updateStatus: String?
 ) {
     var backups by remember { mutableStateOf(backup.recentFiles()) }
     var showLocal by remember { mutableStateOf(false) }
@@ -103,7 +105,11 @@ fun SettingsScreen(
             }
         }
         item { SectionEyebrow("Über die App") }
-        item { SettingRow("repavio V1.1", "Offline · Keine KI · Material You", Icons.Outlined.Info, null) }
+        item {
+            SettingRow("Nach Updates suchen", "Prüft öffentliche GitHub-Releases", Icons.Outlined.SystemUpdate, onCheckUpdates)
+            if (updateStatus != null) Text(updateStatus, fontSize = 12.sp, color = SubtleText)
+        }
+        item { SettingRow("repavio V1.3", "Offline nutzbar · Material You", Icons.Outlined.Info, null) }
     }
 }
 

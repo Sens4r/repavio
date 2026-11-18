@@ -9,6 +9,7 @@ import android.os.Bundle
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -77,6 +78,33 @@ fun RepavioApp() {
     var importError by remember { mutableStateOf<String?>(null) }
     var resetRequested by remember { mutableStateOf(false) }
     var showingBrand by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+    var availableUpdate by remember { mutableStateOf<RepavioRelease?>(null) }
+    var checkingUpdates by remember { mutableStateOf(false) }
+    var downloadingUpdate by remember { mutableStateOf(false) }
+    var updateStatus by remember { mutableStateOf<String?>(null) }
+
+    val checkUpdates: () -> Unit = {
+        if (!checkingUpdates) {
+            checkingUpdates = true
+            updateStatus = "Suche nach Updates …"
+            scope.launch {
+                when (val result = RepavioUpdates.check(context)) {
+                    is RepavioUpdateResult.Available -> {
+                        availableUpdate = result.release
+                        updateStatus = null
+                    }
+                    RepavioUpdateResult.Current -> updateStatus = "repavio ist aktuell."
+                    RepavioUpdateResult.Offline -> updateStatus = "Updateprüfung derzeit nicht möglich."
+                }
+                checkingUpdates = false
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        val result = RepavioUpdates.check(context)
+        if (result is RepavioUpdateResult.Available) availableUpdate = result.release
+    }
     LaunchedEffect(Unit) { delay(850); showingBrand = false }
     LaunchedEffect(Unit) { BackupManager.schedule(context); backup.backupNow() }
     val exportLauncher = rememberLauncherForActivityResult(
@@ -176,9 +204,53 @@ fun RepavioApp() {
                             try { pendingImport = file.readText(Charsets.UTF_8) }
                             catch (_: Exception) { importError = "Sicherung konnte nicht gelesen werden." }
                         },
-                        onReset = { resetRequested = true })
+                        onReset = { resetRequested = true },
+                        onCheckUpdates = checkUpdates,
+                        updateStatus = updateStatus)
                 }
             }
+        }
+        // Offer updates only after the splash and introduction have finished.
+        if (availableUpdate != null && !showIntro && !showingBrand && !resetRequested) {
+            val release = availableUpdate!!
+            AlertDialog(
+                onDismissRequest = { if (!downloadingUpdate) availableUpdate = null },
+                title = { Text("Update verfügbar: V${release.version}") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Eine neue Version von repavio ist verfügbar.")
+                        if (release.notes.isNotBlank()) {
+                            Text(release.notes.take(800), fontSize = 12.sp, color = SubtleText)
+                        }
+                        if (downloadingUpdate) {
+                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                            Text("APK wird heruntergeladen …", fontSize = 12.sp)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(enabled = !downloadingUpdate, onClick = {
+                        downloadingUpdate = true
+                        scope.launch {
+                            try {
+                                val apk = RepavioUpdates.download(context, release)
+                                RepavioUpdates.openAndroidInstaller(context, apk)
+                                availableUpdate = null
+                                updateStatus = "Android prüft die Installation."
+                            } catch (_: Exception) {
+                                updateStatus = "Update konnte nicht installiert werden. Bitte erneut versuchen."
+                            } finally {
+                                downloadingUpdate = false
+                            }
+                        }
+                    }) { Text("Jetzt aktualisieren") }
+                },
+                dismissButton = {
+                    TextButton(enabled = !downloadingUpdate, onClick = { availableUpdate = null }) {
+                        Text("Später")
+                    }
+                }
+            )
         }
         if (pendingImport != null) {
             AlertDialog(onDismissRequest = { pendingImport = null },

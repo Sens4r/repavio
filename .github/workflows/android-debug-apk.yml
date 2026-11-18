@@ -1,16 +1,22 @@
-name: Build Android Debug APK
+name: Build Android APK
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: repavio-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    name: Build repavio V1.2 debug APK
+    name: Build and verify repavio APK
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -31,41 +37,86 @@ jobs:
 
       - name: Install Android API 36 platform
         run: |
-          echo "Android SDK: ${ANDROID_HOME}"
+          set -euo pipefail
           SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -print -quit)"
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" --install 'platforms;android-36'
 
-      - name: Build installable debug APK
+      - name: Build debug APK for testing
         run: gradle --no-daemon --stacktrace :app:assembleDebug
 
-      - name: Upload debug APK
+      - name: Upload debug APK to Actions artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: repavio-v1.2-debug-apk
+          name: repavio-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish debug APK as GitHub Release
-        if: github.ref == 'refs/heads/main'
+      - name: Check release signing is configured
+        id: signing
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.REPAVIO_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.REPAVIO_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.REPAVIO_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.REPAVIO_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$KEYSTORE_BASE64" && -n "$KEYSTORE_PASSWORD" && -n "$KEY_ALIAS" && -n "$KEY_PASSWORD" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Release signing not configured: no public release will be created.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Restore keystore from GitHub Secrets
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.REPAVIO_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/repavio-release.jks"
+          test -s "$RUNNER_TEMP/repavio-release.jks"
+
+      - name: Build APK signed with the permanent release key
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          REPAVIO_KEYSTORE_PATH: ${{ runner.temp }}/repavio-release.jks
+          REPAVIO_KEYSTORE_PASSWORD: ${{ secrets.REPAVIO_KEYSTORE_PASSWORD }}
+          REPAVIO_KEY_ALIAS: ${{ secrets.REPAVIO_KEY_ALIAS }}
+          REPAVIO_KEY_PASSWORD: ${{ secrets.REPAVIO_KEY_PASSWORD }}
+        run: gradle --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Verify signed release APK
+        if: steps.signing.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          APK='app/build/outputs/apk/release/app-release.apk'
+          test -s "$APK"
+          SIGNER="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$SIGNER"
+          "$SIGNER" verify "$APK"
+
+      - name: Publish the signed APK as a stable GitHub Release
+        if: steps.signing.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           VERSION="$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)"
-          [[ "$VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+(-[a-zA-Z0-9.-]+)?$ ]] || { echo "Invalid or missing versionName: $VERSION"; exit 1; }
+          [[ "$VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]] || { echo 'Invalid versionName'; exit 1; }
           TAG="v$VERSION"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; bump versionName for the next release."
+            echo "Release $TAG already exists; versionName must be increased for a new release." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          APK="repavio-$TAG-debug.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "$APK"
+          APK="repavio-$TAG-release.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
           gh release create "$TAG" "$APK" \
             --target "$GITHUB_SHA" \
-            --title "repavio $TAG (Debug)" \
-            --notes "Automatisch gebaute Android-Debug-APK von repavio $TAG. Für Tests vorgesehen; kein produktiv signierter Release-Build. Bei einer bereits installierten Version kann aufgrund eines anderen Debug-Signaturschlüssels eine Neuinstallation erforderlich sein. Vorher Trainingsdaten sichern." \
-            --prerelease
-          echo "Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
+            --title "repavio $TAG" \
+            --generate-notes \
+            --latest
+          echo "Stable release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
