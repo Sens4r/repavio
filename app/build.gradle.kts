@@ -4,7 +4,7 @@ plugins {
 }
 android {
     namespace = "de.gymminimal.app"
-    compileSdk = 37
+    compileSdk = 36
     defaultConfig {
         applicationId = "de.gymminimal.app"
         minSdk = 26
