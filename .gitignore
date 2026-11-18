@@ -1,0 +1,24 @@
+# Local development and generated build outputs
+.gradle/
+.kotlin/
+.idea/
+.cxx/
+.externalNativeBuild/
+**/build/
+local.properties
+*.iml
+*.log
+.DS_Store
+Thumbs.db
+
+# Build artifacts and private signing credentials
+*.apk
+*.aab
+*.keystore
+*.jks
+*.p12
+*.p8
+*.pem
+*.key
+keystore.properties
+signing.properties
