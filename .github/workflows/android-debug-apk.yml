@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, test/v1.3.5-downloadmanager]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
 
   release:
     name: Sign and publish repavio release
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test/v1.3.5-downloadmanager')
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -141,6 +141,7 @@ jobs:
           echo 'Release APK: no REQUEST_INSTALL_PACKAGES permission.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish the signed APK as a stable GitHub Release
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -160,3 +161,25 @@ jobs:
             --notes "Version 1.3.4: Testrelease für den Browser-Download aus dem Update-Popup von repavio V1.3.3. Trainingsfunktionen und Signierung unverändert. Keine REQUEST_INSTALL_PACKAGES-Berechtigung." \
             --latest
           echo "Stable release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
+ 
+      - name: Publish signed V1.3.5 as a GitHub prerelease
+        if: github.ref == 'refs/heads/test/v1.3.5-downloadmanager'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          test "$VERSION" = '1.3.5'
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Test release $TAG already exists; not overwriting it." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          APK="repavio-$TAG-release.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          gh release create "$TAG" "$APK" \
+            --target "$GITHUB_SHA" \
+            --title "repavio $TAG – Downloadmanager-Test" \
+            --notes "Testversion: APK wird über Androids Downloadmanager in app-privaten Speicher geladen, per SHA-256 geprüft und dann in Downloads bereitgestellt. Kein In-App-Installer, keine REQUEST_INSTALL_PACKAGES-Berechtigung. Browserlink als Alternative. Reguläres Release bleibt V1.3.4." \
+            --prerelease --latest=false
+          echo "Test prerelease: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"

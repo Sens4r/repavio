@@ -109,7 +109,7 @@ fun SettingsScreen(
             SettingRow("Nach Updates suchen", "Prüft öffentliche GitHub-Releases", Icons.Outlined.SystemUpdate, onCheckUpdates)
             if (updateStatus != null) Text(updateStatus, fontSize = 12.sp, color = SubtleText)
         }
-        item { SettingRow("repavio V1.3.4", "Offline nutzbar · Material You", Icons.Outlined.Info, null) }
+        item { SettingRow("repavio V1.3.5 (Testversion)", "Offline nutzbar · Material You", Icons.Outlined.Info, null) }
     }
 }
 
