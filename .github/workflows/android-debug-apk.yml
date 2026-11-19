@@ -157,6 +157,6 @@ jobs:
           gh release create "$TAG" "$APK" \
             --target "$GITHUB_SHA" \
             --title "repavio $TAG" \
-            --notes "Updateprüfung in repavio, APK-Download per Browser und Android-Installation nach Nutzerbestätigung. Keine REQUEST_INSTALL_PACKAGES-Berechtigung. Reguläres Release für den Vergleich mit der V1.3.2-Testversion." \
+            --notes "Version 1.3.4: Testrelease für den Browser-Download aus dem Update-Popup von repavio V1.3.3. Trainingsfunktionen und Signierung unverändert. Keine REQUEST_INSTALL_PACKAGES-Berechtigung." \
             --latest
           echo "Stable release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
