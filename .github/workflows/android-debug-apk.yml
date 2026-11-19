@@ -127,6 +127,19 @@ jobs:
           test -n "$SIGNER"
           "$SIGNER" verify "$APK"
 
+      - name: Verify APK does not request installation permission
+        run: |
+          set -euo pipefail
+          APK='app/build/outputs/apk/release/app-release.apk'
+          AAPT="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt | sort -V | tail -n 1)"
+          test -n "$AAPT"
+          "$AAPT" dump permissions "$APK" > "$RUNNER_TEMP/repavio-permissions.txt"
+          if grep -q 'android.permission.REQUEST_INSTALL_PACKAGES' "$RUNNER_TEMP/repavio-permissions.txt"; then
+            echo '::error::Release APK unexpectedly requests installation permission'
+            exit 1
+          fi
+          echo 'Release APK: no REQUEST_INSTALL_PACKAGES permission.' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish the signed APK as a stable GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -144,6 +157,6 @@ jobs:
           gh release create "$TAG" "$APK" \
             --target "$GITHUB_SHA" \
             --title "repavio $TAG" \
-            --notes "Sicherheitsupdate: APK-Prüfsumme verpflichtend, App-Kennung und Signatur vor Installation geprüft; abgesicherter GitHub-Workflow. Update-Funktion unverändert." \
+            --notes "Updateprüfung in repavio, APK-Download per Browser und Android-Installation nach Nutzerbestätigung. Keine REQUEST_INSTALL_PACKAGES-Berechtigung. Reguläres Release für den Vergleich mit der V1.3.2-Testversion." \
             --latest
           echo "Stable release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
