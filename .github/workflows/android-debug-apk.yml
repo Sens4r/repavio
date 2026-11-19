@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, test/play-protect-v1.3.2]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
 
   release:
     name: Sign and publish repavio release
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test/play-protect-v1.3.2')
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -128,6 +128,7 @@ jobs:
           "$SIGNER" verify "$APK"
 
       - name: Publish the signed APK as a stable GitHub Release
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -147,3 +148,39 @@ jobs:
             --notes "Sicherheitsupdate: APK-Prüfsumme verpflichtend, App-Kennung und Signatur vor Installation geprüft; abgesicherter GitHub-Workflow. Update-Funktion unverändert." \
             --latest
           echo "Stable release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify test APK does not request package installation permission
+        if: github.ref == 'refs/heads/test/play-protect-v1.3.2'
+        run: |
+          set -euo pipefail
+          APK='app/build/outputs/apk/release/app-release.apk'
+          AAPT="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt | sort -V | tail -n 1)"
+          test -n "$AAPT"
+          "$AAPT" dump permissions "$APK" > "$RUNNER_TEMP/repavio-permissions.txt"
+          if grep -q 'android.permission.REQUEST_INSTALL_PACKAGES' "$RUNNER_TEMP/repavio-permissions.txt"; then
+            echo "::error::Test APK still requests installation permission"
+            exit 1
+          fi
+          echo 'Verified: no REQUEST_INSTALL_PACKAGES permission.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish signed v1.3.2 as a GitHub prerelease
+        if: github.ref == 'refs/heads/test/play-protect-v1.3.2'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          test "$VERSION" = '1.3.2'
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Test release $TAG already exists; refusing to replace it." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          APK="repavio-$TAG-release.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          gh release create "$TAG" "$APK" \
+            --target "$GITHUB_SHA" \
+            --title "repavio $TAG – Play-Protect-Test" \
+            --notes "Nur zum Vergleichstest: ohne REQUEST_INSTALL_PACKAGES und ohne In-App-APK-Installation. Signiert mit dem bisherigen repavio-Release-Schlüssel. Die reguläre Version bleibt v1.3.1. Bitte nicht installieren, falls Play Protect weiterhin eine Schadsoftwarewarnung zeigt." \
+            --prerelease --latest=false
+          echo "Test prerelease: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"

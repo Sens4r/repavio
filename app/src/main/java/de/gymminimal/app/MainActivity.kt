@@ -81,7 +81,6 @@ fun RepavioApp() {
     val scope = rememberCoroutineScope()
     var availableUpdate by remember { mutableStateOf<RepavioRelease?>(null) }
     var checkingUpdates by remember { mutableStateOf(false) }
-    var downloadingUpdate by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf<String?>(null) }
 
     val checkUpdates: () -> Unit = {
@@ -210,45 +209,23 @@ fun RepavioApp() {
                 }
             }
         }
-        // Offer updates only after the splash and introduction have finished.
+        // In this test prerelease, show update information only. Installation is disabled.
         if (availableUpdate != null && !showIntro && !showingBrand && !resetRequested) {
             val release = availableUpdate!!
             AlertDialog(
-                onDismissRequest = { if (!downloadingUpdate) availableUpdate = null },
+                onDismissRequest = { availableUpdate = null },
                 title = { Text("Update verfügbar: V${release.version}") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Eine neue Version von repavio ist verfügbar.")
-                        if (release.notes.isNotBlank()) {
-                            Text(release.notes.take(800), fontSize = 12.sp, color = SubtleText)
-                        }
-                        if (downloadingUpdate) {
-                            LinearProgressIndicator(Modifier.fillMaxWidth())
-                            Text("APK wird heruntergeladen …", fontSize = 12.sp)
-                        }
-                    }
+                    Text("Diese Play-Protect-Testversion installiert keine APK-Dateien. Die Installation aus repavio heraus ist vorübergehend deaktiviert.")
                 },
                 confirmButton = {
-                    TextButton(enabled = !downloadingUpdate, onClick = {
-                        downloadingUpdate = true
-                        scope.launch {
-                            try {
-                                val apk = RepavioUpdates.download(context, release)
-                                RepavioUpdates.openAndroidInstaller(context, apk)
-                                availableUpdate = null
-                                updateStatus = "Android prüft die Installation."
-                            } catch (_: Exception) {
-                                updateStatus = "Update konnte nicht installiert werden. Bitte erneut versuchen."
-                            } finally {
-                                downloadingUpdate = false
-                            }
-                        }
-                    }) { Text("Jetzt aktualisieren") }
+                    TextButton(onClick = {
+                        availableUpdate = null
+                        updateStatus = "In-App-Installation ist in dieser Testversion deaktiviert."
+                    }) { Text("Verstanden") }
                 },
                 dismissButton = {
-                    TextButton(enabled = !downloadingUpdate, onClick = { availableUpdate = null }) {
-                        Text("Später")
-                    }
+                    TextButton(onClick = { availableUpdate = null }) { Text("Später") }
                 }
             )
         }
