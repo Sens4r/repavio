@@ -2,6 +2,9 @@ package de.gymminimal.app
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.os.Build
 import android.net.Uri
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
@@ -15,7 +18,7 @@ import java.util.zip.ZipFile
 import javax.net.ssl.HttpsURLConnection
 
 /** Public GitHub Releases are queried without a login. Trainingsdaten werden nie gesendet. */
-data class RepavioRelease(val version: String, val notes: String, val apkUrl: String, val sha256: String?)
+data class RepavioRelease(val version: String, val notes: String, val apkUrl: String, val sha256: String)
 
 sealed interface RepavioUpdateResult {
     data class Available(val release: RepavioRelease) : RepavioUpdateResult
@@ -68,12 +71,14 @@ object RepavioUpdates {
                 for (index in 0 until assets.length()) {
                     val asset = assets.optJSONObject(index) ?: continue
                     val name = asset.optString("name")
-                    if (!name.matches(Regex("repavio-v[0-9]+\\.[0-9]+\\.[0-9]+-release\\.apk"))) continue
+                    if (name != "repavio-$tag-release.apk") continue
                     val url = asset.optString("browser_download_url")
                     val expected = "https://github.com/Sens4r/repavio/releases/download/$tag/$name"
                     if (url != expected) continue // Never follow an arbitrary URL from metadata.
+                    if (asset.optLong("size") !in 1L..MAX_APK_BYTES) continue
+                    // No integrity information means no automatic update, rather than an unchecked APK.
                     val hash = asset.optString("digest").takeIf { it.matches(Regex("sha256:[a-fA-F0-9]{64}")) }
-                        ?.removePrefix("sha256:")
+                        ?.removePrefix("sha256:") ?: return@withContext RepavioUpdateResult.Offline
                     return@withContext RepavioUpdateResult.Available(
                         RepavioRelease(tag.removePrefix("v"), release.optString("body"), url, hash))
                 }
@@ -119,13 +124,12 @@ object RepavioUpdates {
                 }
             }
             if (declaredSize >= 0 && declaredSize != size) error("Unvollständiger Download")
-            if (release.sha256 != null) {
-                val actual = digest.digest().joinToString("") { "%02x".format(it) }
-                if (!actual.equals(release.sha256, ignoreCase = true)) error("APK-Prüfsumme stimmt nicht")
-            }
+            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+            if (!actual.equals(release.sha256, ignoreCase = true)) error("APK-Prüfsumme stimmt nicht")
             ZipFile(tmp).use { zip ->
                 if (zip.getEntry("AndroidManifest.xml") == null) error("Keine gültige APK")
             }
+            verifyDownloadedApk(context, tmp, release)
             if (apk.exists()) apk.delete()
             if (!tmp.renameTo(apk)) error("Download konnte nicht gespeichert werden")
             apk
@@ -133,6 +137,38 @@ object RepavioUpdates {
             connection.disconnect()
             tmp.delete()
         }
+    }
+
+    /** An update must belong to this app, be newer, and carry the installed app's signing key.
+     *  Fail closed if Android cannot read the package metadata or signing certificates.
+     */
+    @Suppress("DEPRECATION")
+    private fun verifyDownloadedApk(context: Context, apk: File, release: RepavioRelease) {
+        val manager = context.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+            PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+        val candidate = manager.getPackageArchiveInfo(apk.absolutePath, flags)
+            ?: error("APK-Paketinformationen konnten nicht geprüft werden")
+        val installed = manager.getPackageInfo(context.packageName, flags)
+
+        if (candidate.packageName != context.packageName) error("Falsche App-Kennung")
+        if (candidate.versionName != release.version) error("APK-Version stimmt nicht")
+        val currentCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+            installed.longVersionCode else installed.versionCode.toLong()
+        val candidateCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+            candidate.longVersionCode else candidate.versionCode.toLong()
+        if (candidateCode <= currentCode) error("APK ist nicht neuer als die installierte Version")
+
+        fun signers(info: PackageInfo): Set<String> {
+            val certificates = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+                info.signingInfo?.apkContentsSigners else info.signatures
+            if (certificates.isNullOrEmpty()) error("APK-Signatur fehlt")
+            return certificates.map { signature ->
+                MessageDigest.getInstance("SHA-256").digest(signature.toByteArray())
+                    .joinToString("") { "%02x".format(it) }
+            }.toSet()
+        }
+        if (signers(candidate) != signers(installed)) error("APK-Signatur stimmt nicht mit repavio überein")
     }
 
     fun openAndroidInstaller(context: Context, apk: File) {
