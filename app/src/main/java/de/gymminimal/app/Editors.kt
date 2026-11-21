@@ -40,6 +40,47 @@ private fun EditorText(
     )
 }
 
+/** Local suggestions, matching beginnings first. */
+fun exerciseMatches(name: String, suggestions: List<String>): List<String> =
+    if (name.isBlank()) emptyList() else suggestions.distinctBy(::exerciseNameKey)
+        .filter { it.contains(name.trim(), ignoreCase = true) && !it.equals(name.trim(), ignoreCase = true) }
+        .sortedWith(compareBy<String> { !exerciseNameKey(it).startsWith(exerciseNameKey(name)) }
+            .thenBy { exerciseNameKey(it) })
+        .take(5)
+
+/** Name field with suggestions INLINE, not a focusable popup. The keyboard and the
+ *  cursor stay on the TextField while the user keeps typing (fixed in V1.1). */
+@Composable
+private fun ExerciseNameField(
+    value: String, suggestions: List<String>, label: String,
+    onValueChange: (String) -> Unit, onPick: (String) -> Unit = onValueChange
+) {
+    var showSuggestions by remember { mutableStateOf(false) }
+    val matches = remember(value, suggestions) { exerciseMatches(value, suggestions) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        EditorText(value, { input ->
+            showSuggestions = input.isNotBlank()
+            onValueChange(input)
+        }, label, Modifier.fillMaxWidth())
+        if (showSuggestions && matches.isNotEmpty()) {
+            Column(Modifier.fillMaxWidth().background(FieldBackground, RoundedCornerShape(10.dp))) {
+                matches.forEachIndexed { index, suggested ->
+                    Row(Modifier.fillMaxWidth().clickable {
+                        showSuggestions = false
+                        onPick(suggested)
+                    }.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text(suggested, fontSize = 13.sp)
+                    }
+                    if (index != matches.lastIndex) {
+                        HorizontalDivider(color = SubtleText.copy(alpha = .15f))
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun ExerciseEditor(
     existing: Exercise?, defaultGroup: String, suggestions: List<String>,
@@ -59,7 +100,6 @@ fun ExerciseEditor(
     var alts by remember(existing?.id) { mutableStateOf(existing?.alternatives ?: emptyList()) }
     var openAlt by remember(existing?.id) { mutableStateOf<String?>(null) }
     var askDelete by remember { mutableStateOf(false) }
-    var showSuggestions by remember { mutableStateOf(false) }
     var showGroups by remember { mutableStateOf(false) }
 
     LaunchedEffect(openNewAlternative) {
@@ -68,13 +108,6 @@ fun ExerciseEditor(
             alts = alts + newAlt
             openAlt = newAlt.id
         }
-    }
-    val matches = remember(name, suggestions) {
-        if (name.isBlank()) emptyList() else suggestions.distinctBy(::exerciseNameKey)
-            .filter { it.contains(name.trim(), ignoreCase = true) && !it.equals(name.trim(), ignoreCase = true) }
-            .sortedWith(compareBy<String> { !exerciseNameKey(it).startsWith(exerciseNameKey(name)) }
-                .thenBy { exerciseNameKey(it) })
-            .take(5)
     }
     val valid = name.isNotBlank() && group.isNotBlank() && group in muscleOptions && weight.toWeightOrNull() != null &&
         reps.toRepsOrNull() != null && (sets.toIntOrNull() ?: 0) > 0 &&
@@ -90,39 +123,21 @@ fun ExerciseEditor(
                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(if (existing == null) "Neue Übung" else "Übung bearbeiten",
                     style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                // Suggestions are INLINE, not a focusable popup. The keyboard and the
-                // cursor stay on the name TextField while the user keeps typing.
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    EditorText(name, { input ->
+                ExerciseNameField(name, suggestions, "Name",
+                    onValueChange = { input ->
                         name = input
-                        showSuggestions = input.isNotBlank()
                         if (existing == null && group.isBlank()) {
                             val guess = inferredMuscleGroup(input, "")
                             if (guess in muscleOptions) group = guess
                         }
-                    }, "Name", Modifier.fillMaxWidth())
-                    if (showSuggestions && matches.isNotEmpty()) {
-                        Column(Modifier.fillMaxWidth().background(
-                            FieldBackground, RoundedCornerShape(10.dp))) {
-                            matches.forEachIndexed { index, suggested ->
-                                Row(Modifier.fillMaxWidth().clickable {
-                                    name = suggested
-                                    showSuggestions = false
-                                    if (existing == null) {
-                                        val guess = inferredMuscleGroup(suggested, "")
-                                        if (guess in muscleOptions) group = guess
-                                    }
-                                }.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically) {
-                                    Text(suggested, fontSize = 13.sp)
-                                }
-                                if (index != matches.lastIndex) {
-                                    HorizontalDivider(color = SubtleText.copy(alpha = .15f))
-                                }
-                            }
+                    },
+                    onPick = { suggested ->
+                        name = suggested
+                        if (existing == null) {
+                            val guess = inferredMuscleGroup(suggested, "")
+                            if (guess in muscleOptions) group = guess
                         }
-                    }
-                }
+                    })
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Muskelgruppe", fontSize = 12.sp, color = SubtleText, modifier = Modifier.weight(1f))
                     Box {
@@ -151,7 +166,7 @@ fun ExerciseEditor(
                 }
                 HorizontalDivider(color = FieldBackground)
                 SectionEyebrow("Alternativübungen – nur als Ersatz")
-                alts.forEach { alt ->
+                alts.forEach { alt -> key(alt.id) {
                     Column(Modifier.fillMaxWidth().background(FieldBackground, RoundedCornerShape(10.dp))
                         .padding(9.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -165,7 +180,8 @@ fun ExerciseEditor(
                             val updateAlt: ((Alternative) -> Alternative) -> Unit = { change ->
                                 alts = alts.map { if (it.id == alt.id) change(it) else it }
                             }
-                            EditorText(alt.name, { v -> updateAlt { it.copy(name = v) } }, "Name", Modifier.fillMaxWidth())
+                            ExerciseNameField(alt.name, suggestions, "Name",
+                                onValueChange = { v -> updateAlt { it.copy(name = v) } })
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 EditorText(alt.weight, { v -> updateAlt { it.copy(weight = v) } },
                                     "Gewicht", Modifier.weight(1f), true)
@@ -185,7 +201,7 @@ fun ExerciseEditor(
                             }
                         }
                     }
-                }
+                } }
                 TextButton(onClick = {
                     val added = Alternative(name = "")
                     alts = alts + added
@@ -370,13 +386,21 @@ fun PhaseDialog(
     onUpdate: (Phase, Set<Int>) -> Unit, onNew: (Phase, Set<Int>) -> Unit,
     startWithNew: Boolean = false
 ) {
-    var name by remember { mutableStateOf(if (startWithNew) { if (app.phase.isConfigured) "Muskelausdauer" else "" } else app.phase.name) }
-    var weeks by remember { mutableStateOf(if (startWithNew) { if (app.phase.isConfigured) "6" else "" } else app.phase.weeks.toString()) }
+    var name by remember { mutableStateOf(if (startWithNew) { if (app.phase.isConfigured && !app.phase.openEnded) "Muskelausdauer" else "" } else app.phase.name) }
+    var weeks by remember { mutableStateOf(if (startWithNew) { if (app.phase.isConfigured && !app.phase.openEnded) "6" else "" } else app.phase.weeks.toString()) }
     var newPhase by remember { mutableStateOf(startWithNew) }
     var phaseMenu by remember { mutableStateOf(false) }
     var days by remember { mutableStateOf(selectedDays(app.plans)) }
     val parsedWeeks = weeks.toIntOrNull()
-    val valid = name.isNotBlank() && parsedWeeks != null && parsedWeeks in 1..52 && days.isNotEmpty()
+    val openEnded = name == NO_PHASE_NAME
+    // Switching between ILB and "Keine Phase" always starts a new period; editing keeps the kind.
+    val typeChoices = when {
+        newPhase -> PHASE_TYPES.map { it.first } + NO_PHASE_NAME
+        app.phase.openEnded -> listOf(NO_PHASE_NAME)
+        else -> PHASE_TYPES.map { it.first }
+    }
+    val valid = name.isNotBlank() && days.isNotEmpty() &&
+        (openEnded || parsedWeeks != null && parsedWeeks in 1..52)
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = CardBackground,
@@ -392,8 +416,8 @@ fun PhaseDialog(
                     }
                     DropdownMenu(expanded = phaseMenu, onDismissRequest = { phaseMenu = false },
                         containerColor = FieldBackground) {
-                        (PHASE_TYPES.map { it.first } + listOfNotNull(name.takeUnless {
-                            n -> PHASE_TYPES.any { it.first == n }
+                        (typeChoices + listOfNotNull(name.takeUnless {
+                            n -> n.isBlank() || n in typeChoices
                         })).distinct().forEach { label ->
                             DropdownMenuItem(text = { Text(label) }, onClick = {
                                 name = label
@@ -403,7 +427,12 @@ fun PhaseDialog(
                         }
                     }
                 }
-                EditorText(weeks, { weeks = it.filter(Char::isDigit) }, "Dauer in Wochen", Modifier.fillMaxWidth(), true)
+                if (openEnded) {
+                    Text("Training ohne ILB-Phase: kein Wochenziel, kein Phasenabschluss.",
+                        fontSize = 12.sp, color = SubtleText)
+                } else {
+                    EditorText(weeks, { weeks = it.filter(Char::isDigit) }, "Dauer in Wochen", Modifier.fillMaxWidth(), true)
+                }
                 Text("Trainingstage auswählen", fontSize = 12.sp, color = SubtleText)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     DAY_SHORT.forEachIndexed { index, day ->
@@ -418,10 +447,12 @@ fun PhaseDialog(
                         }
                     }
                 }
-                Text("${days.size} Einheiten pro Woche · ${((parsedWeeks ?: 0) * days.size)} insgesamt",
+                Text(if (openEnded) "${days.size} Einheiten pro Woche"
+                    else "${days.size} Einheiten pro Woche · ${((parsedWeeks ?: 0) * days.size)} insgesamt",
                     fontSize = 12.sp, color = SubtleText)
                 if (!newPhase) {
-                    Text("${app.completedInPhase} von ${app.phase.target} Einheiten abgeschlossen",
+                    Text(if (app.phase.openEnded) "${app.completedInPhase} Trainings abgeschlossen"
+                        else "${app.completedInPhase} von ${app.phase.target} Einheiten abgeschlossen",
                         fontSize = 12.sp, color = SubtleText)
                     TextButton(onClick = {
                         newPhase = true
@@ -446,9 +477,10 @@ fun PhaseDialog(
         },
         confirmButton = {
             TextButton(enabled = valid, onClick = {
+                val weekCount = if (openEnded) 0 else parsedWeeks!!
                 val phase = if (newPhase)
-                    Phase(name = name, weeks = parsedWeeks!!, unitsPerWeek = days.size)
-                else app.phase.copy(name = name, weeks = parsedWeeks!!, unitsPerWeek = days.size)
+                    Phase(name = name, weeks = weekCount, unitsPerWeek = days.size, openEnded = openEnded)
+                else app.phase.copy(name = name, weeks = weekCount, unitsPerWeek = days.size)
                 if (newPhase) onNew(phase, days) else onUpdate(phase, days)
             }) { Text(if (newPhase) "Phase starten" else "Speichern") }
         },

@@ -39,7 +39,8 @@ class LocalStore(private val context: Context) {
     fun importJson(json: String): AppData {
         val root = JSONObject(json)
         val data = decode(root)
-        require((data.phase.weeks in 1..52 || !data.phase.isConfigured && data.phase.weeks == 0) && data.plans.size == 7)
+        require((data.phase.weeks in 1..52 || data.phase.weeks == 0 && (data.phase.openEnded || !data.phase.isConfigured)) &&
+            data.plans.size == 7)
         require(data.history.size < 100000 && data.plans.all { it.day in 0..6 })
         BackupManager(context).createManualSafetyCopy(exportJson())
         save(data)
@@ -59,6 +60,7 @@ class LocalStore(private val context: Context) {
             put("unitsPerWeek", data.phase.unitsPerWeek)
             data.phase.finishedAt?.let { put("finishedAt", it) }
             data.phase.archivedAt?.let { put("archivedAt", it) }
+            if (data.phase.openEnded) put("openEnded", true)
         })
         put("pastPhases", JSONArray().apply {
             data.pastPhases.forEach { phase -> put(JSONObject().apply {
@@ -66,6 +68,7 @@ class LocalStore(private val context: Context) {
                 put("weeks", phase.weeks); put("unitsPerWeek", phase.unitsPerWeek)
                 phase.finishedAt?.let { put("finishedAt", it) }
                 phase.archivedAt?.let { put("archivedAt", it) }
+                if (phase.openEnded) put("openEnded", true)
             }) }
         })
         put("customTags", JSONArray().apply { data.customTags.forEach { put(it) } })
@@ -130,7 +133,8 @@ class LocalStore(private val context: Context) {
         finishedAt = if (json.has("finishedAt") && !json.isNull("finishedAt"))
             json.getLong("finishedAt") else null,
         archivedAt = if (json.has("archivedAt") && !json.isNull("archivedAt"))
-            json.getLong("archivedAt") else null
+            json.getLong("archivedAt") else null,
+        openEnded = json.optBoolean("openEnded", false)
     )
 
     private fun decode(root: JSONObject): AppData {

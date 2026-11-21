@@ -9,8 +9,8 @@ android {
         applicationId = "de.gymminimal.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 20
-        versionName = "1.3.6"
+        versionCode = 21
+        versionName = "1.4.0"
     }
     // Signing credentials are injected by GitHub Actions from encrypted Secrets.
     // Debug builds and pull-request validation require no signing Secrets.
@@ -48,4 +48,5 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.work:work-runtime:2.12.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation("junit:junit:4.13.2")
 }
