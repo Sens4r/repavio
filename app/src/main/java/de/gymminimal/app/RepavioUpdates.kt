@@ -50,7 +50,7 @@ object RepavioUpdates {
     }
 
     @Suppress("DEPRECATION")
-    private fun installedVersion(context: Context): String =
+    fun installedVersion(context: Context): String =
         context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.0.0"
 
     private fun checkedDownloadUrl(release: RepavioRelease): String {
