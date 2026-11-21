@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,6 +39,8 @@ fun SettingsScreen(
     var showLocal by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var soundEnabled by remember { mutableStateOf(sounds.enabled()) }
+    val context = LocalContext.current
+    val appVersion = remember { runCatching { RepavioUpdates.installedVersion(context) }.getOrDefault("?") }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(11.dp),
         contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -109,7 +112,7 @@ fun SettingsScreen(
             SettingRow("Nach Updates suchen", "Prüft öffentliche GitHub-Releases", Icons.Outlined.SystemUpdate, onCheckUpdates)
             if (updateStatus != null) Text(updateStatus, fontSize = 12.sp, color = SubtleText)
         }
-        item { SettingRow("repavio V1.3.4", "Offline nutzbar · Material You", Icons.Outlined.Info, null) }
+        item { SettingRow("repavio V$appVersion", "Offline nutzbar · Material You", Icons.Outlined.Info, null) }
     }
 }
 

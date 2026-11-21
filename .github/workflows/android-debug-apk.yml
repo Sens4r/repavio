@@ -141,6 +141,7 @@ jobs:
           echo 'Release APK: no REQUEST_INSTALL_PACKAGES permission.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish the signed APK as a stable GitHub Release
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -152,11 +153,13 @@ jobs:
             echo "Release $TAG already exists; versionName must be increased for a new release." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          NOTES="release-notes/$TAG.md"
+          test -s "$NOTES" || { echo "::error::Missing release notes file $NOTES"; exit 1; }
           APK="repavio-$TAG-release.apk"
           cp app/build/outputs/apk/release/app-release.apk "$APK"
           gh release create "$TAG" "$APK" \
             --target "$GITHUB_SHA" \
             --title "repavio $TAG" \
-            --notes "Version 1.3.4: Testrelease für den Browser-Download aus dem Update-Popup von repavio V1.3.3. Trainingsfunktionen und Signierung unverändert. Keine REQUEST_INSTALL_PACKAGES-Berechtigung." \
+            --notes-file "$NOTES" \
             --latest
           echo "Stable release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
