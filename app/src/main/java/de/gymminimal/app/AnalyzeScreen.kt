@@ -1,5 +1,6 @@
 package de.gymminimal.app
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,6 +37,7 @@ private data class Point(val workoutId: String, val whenLogged: Long, val logged
 @Composable
 fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
     var detailId by remember { mutableStateOf<String?>(null) }
+    var selectedMuscle by remember { mutableStateOf<String?>(null) }
     var metric by remember { mutableStateOf("weight") }
     var selectedPhaseId by remember { mutableStateOf(app.phase.id) }
     var phaseDropdown by remember { mutableStateOf(false) }
@@ -46,8 +48,6 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
     if (phases.isEmpty()) {
         Column(Modifier.fillMaxSize().padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Analyse", style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold)
             Text("Noch keine Trainingsdaten vorhanden. Beginne im Trainingstab mit einer Phase.",
                 color = SubtleText, fontSize = 13.sp)
         }
@@ -68,6 +68,13 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
     val totalVolume = points.sumOf { it.logged.volume }
     val groups = points.groupBy { it.logged.performedId }
     val selected = detailId?.let { groups[it] }
+    val byMuscle = groups.entries.groupBy { it.value.last().logged.muscleGroup }
+    val muscleEntries = selectedMuscle?.let { byMuscle[it] }
+
+    // Android back goes one level up: detail → muscle group → overview.
+    BackHandler(enabled = detailId != null || selectedMuscle != null) {
+        if (detailId != null) detailId = null else selectedMuscle = null
+    }
 
     if (selected != null && selected.isNotEmpty()) {
         val latest = selected.last()
@@ -139,92 +146,126 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
         return
     }
 
-    val byMuscle = groups.entries.groupBy { it.value.last().logged.muscleGroup }
-    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp)) {
-        Text("Analyse", style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(6.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) {
-                TextButton(onClick = { phaseDropdown = true },
-                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
-                    Text("${selectedPhase.name} · ${phaseDateLabel(selectedPhase, selectedIsCurrent)}",
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(3.dp))
-                    Icon(Icons.Outlined.ArrowDropDown, "Phase auswählen", modifier = Modifier.size(19.dp))
+    if (selectedMuscle != null && !muscleEntries.isNullOrEmpty()) {
+        val entries = muscleEntries.sortedBy { it.value.last().logged.name }
+        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { selectedMuscle = null }, modifier = Modifier.size(44.dp)) {
+                    Icon(Icons.Outlined.ChevronLeft, "Zurück")
                 }
-                DropdownMenu(expanded = phaseDropdown, onDismissRequest = { phaseDropdown = false },
-                    containerColor = CardBackground) {
-                    phases.forEach { phase ->
-                        DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text(phase.name, fontSize = 13.sp)
-                                    Text(phaseDateLabel(phase, phase.id == app.phase.id),
-                                        fontSize = 10.sp, color = SubtleText)
-                                }
-                            },
-                            onClick = {
-                                selectedPhaseId = phase.id
-                                detailId = null
-                                phaseDropdown = false
-                            }
-                        )
-                    }
+                Column {
+                    Text(selectedMuscle!!, style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold)
+                    Text(selectedPhase.name, fontSize = 11.sp, color = SubtleText)
                 }
             }
-            if (!selectedIsCurrent) {
-                if (selectedPhase.name == "Frühere Phase (ältere Daten)") {
-                    IconButton(onClick = { editingLegacy = true }) {
-                        Icon(Icons.Outlined.Edit, "Alte Phase benennen", tint = SubtleText)
-                    }
-                }
-                IconButton(onClick = { deleteConfirmation = true }) {
-                    Icon(Icons.Outlined.DeleteOutline, "Archivierte Phase löschen", tint = SubtleText)
-                }
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatisticCard("Trainingseinheiten", phaseWorkouts.size.toString(), Modifier.weight(1f))
-            StatisticCard("Trainingsvolumen", "${formatNumber(totalVolume / 1000)} t", Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(22.dp))
-        Text("Übungsfortschritt", style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(10.dp))
-        if (groups.isEmpty()) {
-            Text("In dieser Phase wurden noch keine Trainingseinheiten abgeschlossen.",
-                color = SubtleText, fontSize = 13.sp)
-        } else {
+            Spacer(Modifier.height(12.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                alphabeticTags(MUSCLE_GROUPS + byMuscle.keys).filter { byMuscle[it]?.isNotEmpty() == true }
-                    .forEach { muscle ->
-                        item(key = "group-$muscle") {
-                            Text(muscle, fontSize = 12.sp, color = SubtleText,
-                                modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
-                        }
-                        val entries = byMuscle[muscle].orEmpty().sortedBy { it.value.last().logged.name }
-                        items(entries.chunked(2)) { pair ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()) {
-                                pair.forEach { entry ->
-                                    val e = entry.value.last().logged
-                                    Column(Modifier.weight(1f).height(90.dp)
-                                        .clip(RoundedCornerShape(10.dp)).background(CardBackground)
-                                        .clickable { detailId = entry.key; metric = "weight" }
-                                        .padding(11.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                                        Text(e.name, fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text("${formatNumber(e.weight)} kg", fontSize = 15.sp,
-                                            fontWeight = FontWeight.SemiBold)
-                                        Text("${entry.value.size} Einheiten", fontSize = 10.sp, color = SubtleText)
-                                    }
-                                }
-                                if (pair.size == 1) Spacer(Modifier.weight(1f))
+                items(entries.chunked(2)) { pair ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()) {
+                        pair.forEach { entry ->
+                            val e = entry.value.last().logged
+                            Column(Modifier.weight(1f).height(90.dp)
+                                .clip(RoundedCornerShape(10.dp)).background(CardBackground)
+                                .clickable { detailId = entry.key; metric = "weight" }
+                                .padding(11.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                                Text(e.name, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${formatNumber(e.weight)} kg", fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold)
+                                Text("${entry.value.size} Einheiten", fontSize = 10.sp, color = SubtleText)
                             }
                         }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
+                }
+            }
+        }
+        return
+    }
+
+    val progress = remember(app.history, selectedPhase.id) { phaseProgress(app, selectedPhase.id) }
+    val muscles = alphabeticTags(MUSCLE_GROUPS + byMuscle.keys).filter { byMuscle[it]?.isNotEmpty() == true }
+    LazyColumn(Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) {
+                    TextButton(onClick = { phaseDropdown = true },
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
+                        Text("${selectedPhase.name} · ${phaseDateLabel(selectedPhase, selectedIsCurrent)}",
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(3.dp))
+                        Icon(Icons.Outlined.ArrowDropDown, "Phase auswählen", modifier = Modifier.size(19.dp))
+                    }
+                    DropdownMenu(expanded = phaseDropdown, onDismissRequest = { phaseDropdown = false },
+                        containerColor = CardBackground) {
+                        phases.forEach { phase ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(phase.name, fontSize = 13.sp)
+                                        Text(phaseDateLabel(phase, phase.id == app.phase.id),
+                                            fontSize = 10.sp, color = SubtleText)
+                                    }
+                                },
+                                onClick = {
+                                    selectedPhaseId = phase.id
+                                    detailId = null
+                                    selectedMuscle = null
+                                    phaseDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+                if (!selectedIsCurrent) {
+                    if (selectedPhase.name == "Frühere Phase (ältere Daten)") {
+                        IconButton(onClick = { editingLegacy = true }) {
+                            Icon(Icons.Outlined.Edit, "Alte Phase benennen", tint = SubtleText)
+                        }
+                    }
+                    IconButton(onClick = { deleteConfirmation = true }) {
+                        Icon(Icons.Outlined.DeleteOutline, "Archivierte Phase löschen", tint = SubtleText)
+                    }
+                }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatisticCard("Trainingseinheiten", phaseWorkouts.size.toString(), Modifier.weight(1f))
+                StatisticCard("Trainingsvolumen", "${formatNumber(totalVolume / 1000)} t", Modifier.weight(1f))
+            }
+        }
+        item { ProgressCard(progress) }
+        if (muscles.isEmpty()) {
+            item {
+                Text("In dieser Phase wurden noch keine Trainingseinheiten abgeschlossen.",
+                    color = SubtleText, fontSize = 13.sp)
+            }
+        } else {
+            item {
+                Text("Muskelgruppen", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+            }
+            items(muscles.chunked(2)) { pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    pair.forEach { muscle ->
+                        val count = byMuscle[muscle].orEmpty().size
+                        Column(Modifier.weight(1f).height(72.dp)
+                            .clip(RoundedCornerShape(10.dp)).background(CardBackground)
+                            .clickable { selectedMuscle = muscle }
+                            .padding(11.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                            Text(muscle, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(if (count == 1) "1 Übung" else "$count Übungen",
+                                fontSize = 11.sp, color = SubtleText)
+                        }
+                    }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                }
             }
         }
     }
@@ -244,6 +285,7 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
                     update { deletePreviousPhase(it, selectedPhase.id) }
                     selectedPhaseId = app.phase.id
                     detailId = null
+                    selectedMuscle = null
                     deleteConfirmation = false
                 }) { Text("Endgültig löschen", color = MaterialTheme.colorScheme.error) }
             },
@@ -252,19 +294,46 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
     }
 }
 
+/** Overall progress: the same weight index as the phase summary (each exercise starts at 100 %). */
 @Composable
-private fun StatisticCard(title: String, value: String, modifier: Modifier) {
-    Column(modifier.clip(RoundedCornerShape(11.dp)).background(CardBackground).padding(14.dp)) {
-        Text(title, color = SubtleText, fontSize = 11.sp)
-        Spacer(Modifier.height(8.dp))
-        Text(value, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+private fun ProgressCard(progress: PhaseProgress) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+        .background(CardBackground).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text("Trainingsfortschritt", color = SubtleText, fontSize = 11.sp, modifier = Modifier.weight(1f))
+            if (progress.indices.isNotEmpty()) {
+                Text(String.format(Locale.GERMANY, "%+.1f %%", progress.gainPercent),
+                    fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        if (progress.indices.size < 2) {
+            Spacer(Modifier.height(8.dp))
+            Text("Sichtbar ab zwei Trainings mit Gewichtsangabe.", color = SubtleText, fontSize = 12.sp)
+        } else {
+            Spacer(Modifier.height(10.dp))
+            SmallLineChart(progress.indices, height = 120)
+            Spacer(Modifier.height(6.dp))
+            Text("Ø Gewichtsentwicklung aus ${progress.exerciseCount} Übungen, Start = 100 %. " +
+                "Übungen mit 0 kg bleiben unberücksichtigt.", color = SubtleText, fontSize = 10.sp)
+        }
     }
 }
 
 @Composable
-private fun SmallLineChart(values: List<Double>) {
+private fun StatisticCard(title: String, value: String, modifier: Modifier) {
+    Column(modifier.clip(RoundedCornerShape(10.dp)).background(CardBackground)
+        .padding(horizontal = 12.dp, vertical = 9.dp)) {
+        Text(title, color = SubtleText, fontSize = 10.sp)
+        Spacer(Modifier.height(3.dp))
+        Text(value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun SmallLineChart(values: List<Double>, height: Int = 150) {
     val color = MaterialTheme.colorScheme.primary
-    Canvas(Modifier.fillMaxWidth().height(150.dp)) {
+    Canvas(Modifier.fillMaxWidth().height(height.dp)) {
         if (values.isEmpty()) return@Canvas
         val lo = values.minOrNull() ?: 0.0
         val hi = values.maxOrNull() ?: 0.0

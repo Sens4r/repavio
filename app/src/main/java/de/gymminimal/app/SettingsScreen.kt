@@ -45,9 +45,6 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(11.dp),
         contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
-            Text("Einstellungen", style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(14.dp))
             SectionEyebrow("Datensicherung")
         }
         item {

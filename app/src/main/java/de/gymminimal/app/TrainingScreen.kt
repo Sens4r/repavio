@@ -51,17 +51,14 @@ fun TrainingScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
 
     if (!app.phase.isConfigured) {
         Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("Training", style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold)
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp))
                 .background(CardBackground).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SectionEyebrow("Aktuelle Phase")
                 Text("Noch keine Phase ausgewählt", color = SubtleText, fontSize = 14.sp)
                 Button(onClick = { newPhaseEditor = true; phaseEditorOpen = true },
                     modifier = Modifier.fillMaxWidth()) { Text("Phase auswählen") }
             }
-            Text("Wähle zuerst eine Trainingsphase und deine Trainingstage aus.",
+            Text("Wähle zuerst eine Trainingsphase – oder „Keine Phase“ – und deine Trainingstage aus.",
                 color = SubtleText, fontSize = 13.sp)
         }
         if (phaseEditorOpen) {
@@ -80,9 +77,6 @@ fun TrainingScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
 
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
-            Text("Training", style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(8.dp))
             PhaseCard(app.phase, app.completedInPhase,
                 onClick = { newPhaseEditor = false; phaseEditorOpen = true },
                 onFinish = {
@@ -171,7 +165,7 @@ fun TrainingScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
                     shape = RoundedCornerShape(11.dp)
                 ) {
                     Text(when {
-                        app.remainingInPhase == 0 -> "Phase vollständig"
+                        !app.phase.openEnded && app.remainingInPhase == 0 -> "Phase vollständig"
                         finishedThisWeek -> "Diese Woche bereits geloggt"
                         else -> "Training beenden"
                     }, fontWeight = FontWeight.SemiBold)
@@ -276,7 +270,8 @@ fun TrainingScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
         AlertDialog(
             onDismissRequest = { finishConfirm = false }, containerColor = CardBackground,
             title = { Text("Training abschließen?") },
-            text = { Text("$performedCount Übungen werden mit dem heutigen Datum gespeichert. Der Phasenzähler steigt um eine Einheit.") },
+            text = { Text("$performedCount Übungen werden mit dem heutigen Datum gespeichert." +
+                if (app.phase.openEnded) "" else " Der Phasenzähler steigt um eine Einheit.") },
             confirmButton = {
                 TextButton(onClick = {
                     val result = finishWorkout(app, selectedDay, System.currentTimeMillis())
@@ -298,16 +293,24 @@ fun TrainingScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
 private fun PhaseCard(phase: Phase, completed: Int,
     onClick: () -> Unit, onFinish: () -> Unit, onSummary: () -> Unit
 ) {
+    if (phase.openEnded) {
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp))
+            .background(CardBackground).clickable(onClick = onClick).padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text(phase.name, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+            Text("$completed Trainings", color = SubtleText, fontSize = 13.sp)
+            Spacer(Modifier.width(5.dp))
+            Icon(Icons.Outlined.ChevronRight, "Phase verwalten", tint = SubtleText,
+                modifier = Modifier.size(18.dp))
+        }
+        return
+    }
     val target = phase.target.coerceAtLeast(1)
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp))
         .background(CardBackground).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-            Column(Modifier.weight(1f)) {
-                SectionEyebrow("Aktuelle Phase")
-                Spacer(Modifier.height(3.dp))
-                Text(phase.name, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-            }
+            Text(phase.name, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
             val currentWeek = if (completed >= target) phase.weeks else
                 (completed / phase.unitsPerWeek.coerceAtLeast(1)) + 1
             Text("$currentWeek / ${phase.weeks}",
@@ -483,7 +486,8 @@ private fun SwipeNumberField(
     var editValue by remember(value, editing) { mutableStateOf(value) }
     val currentValue by rememberUpdatedState(value)
     val currentOnChange by rememberUpdatedState(onChange)
-    val stepPx = with(LocalDensity.current) { 11.dp.toPx() }
+    // Finger travel per step. 11 dp (up to V1.3.6) was reported as too sensitive.
+    val stepPx = with(LocalDensity.current) { 22.dp.toPx() }
     val sounds = LocalRepavioSounds.current
     var accumulated by remember { mutableFloatStateOf(0f) }
     var dragNumber by remember { mutableDoubleStateOf(0.0) }

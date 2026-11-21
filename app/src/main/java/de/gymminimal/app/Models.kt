@@ -80,7 +80,14 @@ val EXERCISE_SUGGESTIONS = listOf(
     "Crunches", "Crunches am Kabel", "Reverse Crunches", "Plank", "Side Plank", "Sit-ups",
     "Beinheben", "Hängendes Beinheben", "Hängendes Knieheben", "Russian Twists", "Dead Bug",
     "Bicycle Crunches", "Ab Wheel Rollout", "Bauchpresse", "Hollow Hold", "Mountain Climbers",
-    "Pallof Press", "Farmer's Walk"
+    "Pallof Press", "Farmer's Walk",
+    // Calisthenics / Körpergewicht
+    "Australian Pull-ups", "Ring Rows", "Negative Klimmzüge", "Archer Pull-ups", "Typewriter Pull-ups",
+    "Scapula Pull-ups", "Muscle-ups", "Dead Hang", "Front Lever", "Back Lever", "Skin the Cat",
+    "Pike Push-ups", "Handstand Push-ups", "Handstand", "Archer Push-ups", "Diamond Push-ups",
+    "Decline Push-ups", "Clap Push-ups", "Pseudo Planche Push-ups", "Planche Lean", "Tuck Planche",
+    "Ring Dips", "Bank-Dips", "Straight Bar Dips", "Pistol Squats", "Shrimp Squats", "Sissy Squats",
+    "Cossack Squats", "Jump Squats", "L-Sit", "Dragon Flag", "Toes to Bar", "Windshield Wipers", "Burpees"
 ).distinct()
 
 /** A stable exercise identity distinct from the ID of a tile in a weekday plan. */
@@ -101,6 +108,11 @@ fun inferredMuscleGroup(name: String, fallback: String = "Sonstige"): String {
         listOf("kniebeug", "bein", "waden", "squat").any { it in n } -> "Beine"
         listOf("schulter", "seitheb", "frontheb").any { it in n } -> "Schulter"
         listOf("bauch", "crunch", "plank").any { it in n } -> "Bauch"
+        // Calisthenics keywords. Checked after the original rules so older inferences never change.
+        listOf("pull-up", "chin-up", "muscle-up", "row", "lever", "dead hang", "skin the cat").any { it in n } -> "Rücken"
+        listOf("pike", "handstand").any { it in n } -> "Schulter"
+        listOf("push-up", "planche").any { it in n } -> "Brust"
+        listOf("l-sit", "dragon flag", "toes to bar", "windshield").any { it in n } -> "Bauch"
         else -> fallback.ifBlank { "Sonstige" }
     }
 }
@@ -141,11 +153,15 @@ data class Phase(
     val weeks: Int,
     val unitsPerWeek: Int,
     val finishedAt: Long? = null,
-    val archivedAt: Long? = null
+    val archivedAt: Long? = null,
+    /** "Keine Phase": training without ILB target, week counter or completion. */
+    val openEnded: Boolean = false
 ) {
-    val target: Int get() = weeks * unitsPerWeek
-    val isConfigured: Boolean get() = name.isNotBlank() && weeks > 0 && unitsPerWeek > 0
+    val target: Int get() = if (openEnded) 0 else weeks * unitsPerWeek
+    val isConfigured: Boolean get() = name.isNotBlank() && unitsPerWeek > 0 && (openEnded || weeks > 0)
 }
+
+const val NO_PHASE_NAME = "Keine Phase"
 
 // Only completed workouts are data. No zero-valued records for missed days.
 data class LoggedExercise(
@@ -184,7 +200,8 @@ data class AppData(
     val exerciseCatalog: List<ExerciseDefinition> = emptyList()
 ) {
     val completedInPhase: Int get() = history.count { it.phaseId == phase.id }
-    val remainingInPhase: Int get() = (phase.target - completedInPhase).coerceAtLeast(0)
+    val remainingInPhase: Int get() = if (phase.openEnded) Int.MAX_VALUE
+        else (phase.target - completedInPhase).coerceAtLeast(0)
     fun plan(day: Int): DayPlan = plans.first { it.day == day }
     fun choice(exerciseId: String): ExerciseChoice = choices[exerciseId] ?: ExerciseChoice()
     // Drafts belong to the tile. Completed values belong to the canonical exercise ID.
@@ -322,7 +339,7 @@ fun finishWorkout(data: AppData, day: Int, timestamp: Long): AppData? {
 
 // A phase completes only when the user explicitly confirms it after all units are logged.
 fun completePhase(data: AppData, timestamp: Long): AppData =
-    if (data.phase.isConfigured && data.remainingInPhase == 0 && data.phase.finishedAt == null)
+    if (data.phase.isConfigured && !data.phase.openEnded && data.remainingInPhase == 0 && data.phase.finishedAt == null)
         data.copy(phase = data.phase.copy(finishedAt = timestamp)) else data
 
 // Old v0.1/v0.2 logs may reference a former phase whose descriptive settings were
