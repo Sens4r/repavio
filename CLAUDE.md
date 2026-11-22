@@ -43,6 +43,6 @@ Nur `Sens4r/repavio` verändern. Vor Updates, die Daten betreffen, ein externes 
 | 1.3.5 | 20.11.2026 | Downloadmanager eingeführt; Installation ohne Play-Protect-Sperre bestätigt |
 | 1.3.6 | 21.11.2026 | Update 1.3.5 → 1.3.6 über den Downloadmanager auf dem Pixel bestätigt |
 | 1.4.0 | 21.11.2026 | „Keine Phase“, Analyse-Drill-down mit Fortschrittsgrafik, Calisthenics-Übungen, weniger empfindliches Wischen; Update und Funktionen auf dem Pixel bestätigt |
-| 1.4.1 | 22.11.2026 | Neues UI im MCI-Stil (Vorschau vom Nutzer freigegeben), Vollbildmodus, Icon-Tab-Leiste, Balkendiagramm im Übungsdetail; auf dem Pixel noch nicht bestätigt |
+| 1.4.1 | 22.11.2026 | Neues UI im MCI-Stil (Vorschau vom Nutzer freigegeben), Vollbildmodus, Icon-Tab-Leiste, Balkendiagramm im Übungsdetail, Einstellungen als Kategorie-Kacheln, schlankes Update-Popup; auf dem Pixel noch nicht bestätigt |
 
 Offen: nichts Dringendes. Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.

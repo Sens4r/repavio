@@ -186,38 +186,44 @@ fun RepavioApp() {
         // Android's download manager handles transfer; installation remains user-initiated.
         if (availableUpdate != null && !showIntro && !showingBrand && !resetRequested) {
             val release = availableUpdate!!
+            val modern = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
             AlertDialog(
                 onDismissRequest = { if (!downloadingUpdate) availableUpdate = null },
-                title = { Text("Update verfügbar: V${release.version}") },
+                containerColor = CardBackground, shape = RoundedCornerShape(28.dp),
+                title = { Text("V${release.version} verfügbar", fontWeight = FontWeight.ExtraBold) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                                "Die APK wird über Android heruntergeladen, geprüft und dann in Downloads gespeichert. Dort kannst du die Installation bestätigen."
-                            else
-                                "Auf dieser älteren Android-Version wird der Download im Browser geöffnet."
-                        )
-                        if (release.notes.isNotBlank()) {
-                            Text(release.notes.take(550), fontSize = 12.sp, color = SubtleText)
-                        }
-                        if (downloadingUpdate) {
-                            LinearProgressIndicator(Modifier.fillMaxWidth())
-                            Text(
-                                downloadProgress?.let { "Download: $it %" }
-                                    ?: "Download wird vorbereitet …",
-                                fontSize = 12.sp
-                            )
-                        }
-                        if (downloadFailure != null) {
-                            Text(downloadFailure!!, fontSize = 12.sp,
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        when {
+                            downloadingUpdate -> {
+                                val progress = downloadProgress
+                                if (progress != null) LinearProgressIndicator(
+                                    progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
+                                else LinearProgressIndicator(Modifier.fillMaxWidth())
+                                Text(progress?.let { "$it %" } ?: "Wird vorbereitet …",
+                                    fontSize = 13.sp, color = SubtleText)
+                            }
+                            downloadFailure != null -> Text(downloadFailure!!, fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.error)
+                            else -> Text(if (modern) "Wird geladen, geprüft und in Downloads abgelegt."
+                                else "Download im Browser.", fontSize = 14.sp, color = SubtleText)
+                        }
+                        if (downloadFailure != null && !downloadingUpdate) {
+                            TextButton(onClick = {
+                                try {
+                                    RepavioUpdates.openDownloadInBrowser(context, release)
+                                    availableUpdate = null
+                                    updateStatus = "GitHub als Alternative geöffnet."
+                                } catch (_: Exception) {
+                                    downloadFailure = "GitHub konnte nicht geöffnet werden."
+                                }
+                            }, contentPadding = PaddingValues(0.dp)) { Text("Stattdessen auf GitHub laden") }
                         }
                     }
                 },
                 confirmButton = {
-                    TextButton(enabled = !downloadingUpdate, onClick = {
+                    Button(enabled = !downloadingUpdate, shape = RoundedCornerShape(24.dp), onClick = {
                         downloadFailure = null
-                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                        if (!modern) {
                             try {
                                 RepavioUpdates.openDownloadInBrowser(context, release)
                                 availableUpdate = null
@@ -237,51 +243,34 @@ fun RepavioApp() {
                                     showDownloadReady = true
                                     updateStatus = "APK geprüft und im Download-Ordner gespeichert."
                                 } catch (_: Exception) {
-                                    downloadFailure = "Download oder Prüfung fehlgeschlagen. Erneut versuchen oder GitHub verwenden."
+                                    downloadFailure = "Download oder Prüfung fehlgeschlagen."
                                 } finally {
                                     downloadingUpdate = false
                                 }
                             }
                         }
-                    }) {
-                        Text(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                            "Jetzt herunterladen" else "Im Browser herunterladen")
-                    }
+                    }) { Text(if (downloadFailure != null) "Erneut" else "Laden", fontWeight = FontWeight.Bold) }
                 },
                 dismissButton = {
-                    Column(horizontalAlignment = Alignment.End) {
-                        TextButton(enabled = !downloadingUpdate, onClick = {
-                            try {
-                                RepavioUpdates.openDownloadInBrowser(context, release)
-                                availableUpdate = null
-                                updateStatus = "GitHub als Alternative geöffnet."
-                            } catch (_: Exception) {
-                                downloadFailure = "GitHub konnte nicht geöffnet werden."
-                            }
-                        }) { Text("Alternativ auf GitHub") }
-                        TextButton(enabled = !downloadingUpdate, onClick = {
-                            availableUpdate = null
-                        }) { Text("Später") }
-                    }
+                    TextButton(enabled = !downloadingUpdate, onClick = { availableUpdate = null }) { Text("Später") }
                 }
             )
         }
         if (showDownloadReady) {
             AlertDialog(
                 onDismissRequest = { showDownloadReady = false },
-                title = { Text("Update heruntergeladen") },
-                text = {
-                    Text("Die SHA-256-Prüfsumme stimmt. Die APK liegt jetzt unter Downloads. Öffne sie dort und bestätige die Installation mit Android.")
-                },
+                containerColor = CardBackground, shape = RoundedCornerShape(28.dp),
+                title = { Text("Update bereit", fontWeight = FontWeight.ExtraBold) },
+                text = { Text("Geprüft. In Downloads öffnen und installieren.", fontSize = 14.sp, color = SubtleText) },
                 confirmButton = {
-                    TextButton(onClick = {
+                    Button(shape = RoundedCornerShape(24.dp), onClick = {
                         showDownloadReady = false
                         try {
                             RepavioUpdates.openDownloads(context)
                         } catch (_: Exception) {
                             updateStatus = "Öffne den Dateimanager und gehe zu Downloads."
                         }
-                    }) { Text("Downloads öffnen") }
+                    }) { Text("Öffnen", fontWeight = FontWeight.Bold) }
                 },
                 dismissButton = {
                     TextButton(onClick = { showDownloadReady = false }) { Text("Später") }
