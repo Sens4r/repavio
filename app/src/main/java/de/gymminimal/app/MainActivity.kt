@@ -13,6 +13,11 @@ import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BarChart
@@ -78,6 +83,7 @@ fun RepavioApp() {
     var importError by remember { mutableStateOf<String?>(null) }
     var resetRequested by remember { mutableStateOf(false) }
     var showingBrand by remember { mutableStateOf(true) }
+    var trainingFocus by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var availableUpdate by remember { mutableStateOf<RepavioRelease?>(null) }
     var checkingUpdates by remember { mutableStateOf(false) }
@@ -148,46 +154,9 @@ fun RepavioApp() {
         Scaffold(
             containerColor = ScreenBackground,
             bottomBar = {
-                NavigationBar(
-                    containerColor = ScreenBackground,
-                    tonalElevation = 0.dp
-                ) {
-                    NavigationBarItem(
-                        selected = tab == 0, onClick = { tab = 0 },
-                        icon = { Icon(Icons.Outlined.FitnessCenter, "Training") },
-                        label = { Text("Training") },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = CardBackground,
-                            unselectedTextColor = SubtleText,
-                            unselectedIconColor = SubtleText
-                        )
-                    )
-                    NavigationBarItem(
-                        selected = tab == 1, onClick = { tab = 1 },
-                        icon = { Icon(Icons.Outlined.BarChart, "Analyse") },
-                        label = { Text("Analyse") },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = CardBackground,
-                            unselectedTextColor = SubtleText,
-                            unselectedIconColor = SubtleText
-                        )
-                    )
-                    NavigationBarItem(
-                        selected = tab == 2, onClick = { tab = 2 },
-                        icon = { Icon(Icons.Outlined.Settings, "Einstellungen") },
-                        label = { Text("Einstellungen") },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                            indicatorColor = CardBackground,
-                            unselectedTextColor = SubtleText,
-                            unselectedIconColor = SubtleText
-                        )
-                    )
+                // Icons only. Hidden in the training fullscreen mode.
+                if (!(tab == 0 && trainingFocus)) {
+                    IconTabBar(tab, onSelect = { tab = it })
                 }
             }
         ) { inset ->
@@ -197,7 +166,8 @@ fun RepavioApp() {
                     .background(ScreenBackground)
             ) {
                 when (tab) {
-                    0 -> TrainingScreen(app, update)
+                    0 -> TrainingScreen(app, update, focus = trainingFocus,
+                        onFocusChange = { trainingFocus = it })
                     1 -> AnalyzeScreen(app, update)
                     else -> SettingsScreen(backup, sounds,
                         onExport = { exportLauncher.launch("repavio_Backup.json") },
@@ -380,4 +350,31 @@ fun RepavioApp() {
 fun SectionEyebrow(text: String) {
     Text(text.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Medium,
         color = SubtleText, letterSpacing = 0.8.sp)
+}
+
+/** Icon-only tab bar, 64 dp above the system navigation area. */
+@Composable
+private fun IconTabBar(selected: Int, onSelect: (Int) -> Unit) {
+    val tabs = listOf(
+        Icons.Outlined.FitnessCenter to "Training",
+        Icons.Outlined.BarChart to "Analyse",
+        Icons.Outlined.Settings to "Einstellungen"
+    )
+    val scheme = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().background(CardBackground).navigationBarsPadding().height(64.dp)
+        .selectableGroup(), verticalAlignment = Alignment.CenterVertically) {
+        tabs.forEachIndexed { index, (icon, label) ->
+            val active = index == selected
+            Box(Modifier.weight(1f).fillMaxHeight()
+                .selectable(selected = active, onClick = { onSelect(index) }, role = Role.Tab),
+                contentAlignment = Alignment.Center) {
+                Box(Modifier.size(width = 64.dp, height = 32.dp).clip(RoundedCornerShape(16.dp))
+                    .background(if (active) scheme.primaryContainer else Color.Transparent),
+                    contentAlignment = Alignment.Center) {
+                    Icon(icon, label, tint = if (active) scheme.onPrimaryContainer else SubtleText,
+                        modifier = Modifier.size(24.dp))
+                }
+            }
+        }
+    }
 }

@@ -1,5 +1,6 @@
 package de.gymminimal.app
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.*
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -11,6 +12,7 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -23,7 +25,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,7 +38,10 @@ import java.util.Locale
 import kotlin.math.abs
 
 @Composable
-fun TrainingScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
+fun TrainingScreen(
+    app: AppData, update: ((AppData) -> AppData) -> Unit,
+    focus: Boolean = false, onFocusChange: (Boolean) -> Unit = {}
+) {
     var selectedDay by remember { mutableIntStateOf((java.time.LocalDate.now().dayOfWeek.value - 1).coerceIn(0, 6)) }
     var editingExercise by remember { mutableStateOf<Exercise?>(null) }
     var exerciseEditorOpen by remember { mutableStateOf(false) }
@@ -48,15 +56,21 @@ fun TrainingScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
     val finishedThisWeek = hasWorkoutThisWeek(app, selectedDay, System.currentTimeMillis())
     val canFinish = plan.enabled && plan.exercises.isNotEmpty() && app.remainingInPhase > 0 && !finishedThisWeek &&
         plan.exercises.any { app.choice(it.id).status !in listOf("skipped", "unavailable") }
+    // Fullscreen: only the exercises and the finish button. Not persisted; Back leaves it.
+    val focusActive = focus && app.phase.isConfigured && plan.enabled && plan.exercises.isNotEmpty()
+    LaunchedEffect(focus, focusActive) { if (focus && !focusActive) onFocusChange(false) }
+    BackHandler(enabled = focusActive) { onFocusChange(false) }
 
     if (!app.phase.isConfigured) {
         Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp))
-                .background(CardBackground).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Noch keine Phase ausgewählt", color = SubtleText, fontSize = 14.sp)
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+                .background(CardBackground).padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("Noch keine Phase ausgewählt", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                 Button(onClick = { newPhaseEditor = true; phaseEditorOpen = true },
-                    modifier = Modifier.fillMaxWidth()) { Text("Phase auswählen") }
+                    modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(26.dp)) {
+                    Text("Phase auswählen", fontWeight = FontWeight.Bold)
+                }
             }
             Text("Wähle zuerst eine Trainingsphase – oder „Keine Phase“ – und deine Trainingstage aus.",
                 color = SubtleText, fontSize = 13.sp)
@@ -76,46 +90,38 @@ fun TrainingScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
-            PhaseCard(app.phase, app.completedInPhase,
-                onClick = { newPhaseEditor = false; phaseEditorOpen = true },
-                onFinish = {
-                    update { completePhase(it, System.currentTimeMillis()) }
-                    phaseSummaryOpen = true
-                },
-                onSummary = { phaseSummaryOpen = true })
-            Spacer(Modifier.height(18.dp))
-            WeekStrip(selectedDay, app.plans, onSelect = { selectedDay = it; feedback = null })
-            Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(DAY_NAMES[selectedDay], style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold)
-                        if (plan.enabled) {
-                            IconButton(onClick = { dayEditorOpen = true }, modifier = Modifier.size(40.dp)) {
-                                Icon(Icons.Outlined.Edit, "Muskelgruppen für ${DAY_NAMES[selectedDay]} bearbeiten",
-                                    tint = SubtleText, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                    Text(if (!plan.enabled) "Kein Trainingstag" else plan.muscles.ifBlank { "Muskelgruppen auswählen" },
-                        color = if (plan.enabled) Color(0xFFCFD1D6) else SubtleText,
-                        fontSize = 14.sp)
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
+            if (focusActive) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${DAY_NAMES[selectedDay]} · ${plan.exercises.size} Übungen", color = SubtleText,
+                        fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    FocusButton(active = true) { onFocusChange(false) }
                 }
-                if (plan.enabled && plan.exercises.isNotEmpty()) {
-                    Text("${plan.exercises.size} Übungen", color = SubtleText, fontSize = 12.sp)
-                }
+            } else {
+                PhaseCard(app.phase, app.completedInPhase,
+                    onClick = { newPhaseEditor = false; phaseEditorOpen = true },
+                    onFinish = {
+                        update { completePhase(it, System.currentTimeMillis()) }
+                        phaseSummaryOpen = true
+                    },
+                    onSummary = { phaseSummaryOpen = true })
+                Spacer(Modifier.height(16.dp))
+                WeekStrip(selectedDay, app.plans, onSelect = { selectedDay = it; feedback = null })
+                Spacer(Modifier.height(18.dp))
+                DayHeader(selectedDay, plan,
+                    onEdit = { dayEditorOpen = true },
+                    onFocus = { onFocusChange(true) })
             }
         }
         LazyColumn(
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp)
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             if (plan.enabled) {
-                items(plan.exercises, key = { it.id }) { exercise ->
+                itemsIndexed(plan.exercises, key = { _, it -> it.id }) { index, exercise ->
                     ExerciseTile(
+                        number = index + 1,
                         exercise = exercise,
                         choice = app.choice(exercise.id),
                         data = app,
@@ -133,17 +139,17 @@ fun TrainingScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
                         }
                     )
                 }
-                item {
+                if (!focusActive) item {
                     OutlinedButton(
                         onClick = { editingExercise = null; addingAlternative = false; exerciseEditorOpen = true },
-                        modifier = Modifier.fillMaxWidth().height(46.dp),
-                        shape = RoundedCornerShape(11.dp),
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(22.dp),
                         border = BorderStroke(1.dp, Color(0xFF45484D)),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = SubtleText)
                     ) {
                         Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Übung hinzufügen", fontSize = 13.sp)
+                        Text("Übung hinzufügen", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 if (plan.exercises.isEmpty()) {
@@ -158,17 +164,17 @@ fun TrainingScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
             }
         }
         if (plan.enabled && plan.exercises.isNotEmpty()) {
-            Column(Modifier.padding(horizontal = 18.dp, vertical = 10.dp)) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Button(
                     onClick = { finishConfirm = true }, enabled = canFinish,
-                    modifier = Modifier.fillMaxWidth().height(51.dp),
-                    shape = RoundedCornerShape(11.dp)
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(28.dp)
                 ) {
                     Text(when {
                         !app.phase.openEnded && app.remainingInPhase == 0 -> "Phase vollständig"
                         finishedThisWeek -> "Diese Woche bereits geloggt"
                         else -> "Training beenden"
-                    }, fontWeight = FontWeight.SemiBold)
+                    }, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
                 }
                 feedback?.let {
                     Text(it, color = MaterialTheme.colorScheme.primary,
@@ -290,50 +296,104 @@ fun TrainingScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
 }
 
 @Composable
+private fun FocusButton(active: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(22.dp))
+        .background(FieldBackground)) {
+        Icon(if (active) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen,
+            if (active) "Vollbild verlassen" else "Vollbild: nur Übungen anzeigen",
+            tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
+    }
+}
+
+@Composable
+private fun DayHeader(day: Int, plan: DayPlan, onEdit: () -> Unit, onFocus: () -> Unit) {
+    Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(horizontal = 2.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(DAY_NAMES[day], fontSize = 30.sp, fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = (-0.6).sp, lineHeight = 32.sp)
+                if (plan.enabled) {
+                    IconButton(onClick = onEdit, modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Outlined.Edit, "Muskelgruppen für ${DAY_NAMES[day]} bearbeiten",
+                            tint = SubtleText, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+            val tags = alphabeticTags(chosenMuscles(plan.muscles))
+            when {
+                !plan.enabled -> Text("Kein Trainingstag", color = SubtleText, fontSize = 14.sp)
+                tags.isEmpty() -> Text("Muskelgruppen auswählen", color = SubtleText, fontSize = 14.sp)
+                else -> Row(Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    tags.forEach { tag ->
+                        Text(tag, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(FieldBackground)
+                                .padding(horizontal = 12.dp, vertical = 5.dp))
+                    }
+                }
+            }
+        }
+        if (plan.enabled && plan.exercises.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("${plan.exercises.size} Übungen", color = SubtleText, fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold)
+                FocusButton(active = false, onClick = onFocus)
+            }
+        }
+    }
+}
+
+@Composable
 private fun PhaseCard(phase: Phase, completed: Int,
     onClick: () -> Unit, onFinish: () -> Unit, onSummary: () -> Unit
 ) {
-    if (phase.openEnded) {
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp))
-            .background(CardBackground).clickable(onClick = onClick).padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            Text(phase.name, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
-            Text("$completed Trainings", color = SubtleText, fontSize = 13.sp)
-            Spacer(Modifier.width(5.dp))
-            Icon(Icons.Outlined.ChevronRight, "Phase verwalten", tint = SubtleText,
-                modifier = Modifier.size(18.dp))
+    val scheme = MaterialTheme.colorScheme
+    val onContainer = scheme.onPrimaryContainer
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(scheme.primaryContainer)
+        .clickable(onClick = onClick).padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 16.dp)) {
+        Row(verticalAlignment = Alignment.Top) {
+            Text(phase.name, color = onContainer, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold,
+                letterSpacing = (-0.5).sp, lineHeight = 28.sp, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(12.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                Text(if (phase.openEnded) "TRAININGS" else "WOCHE", color = onContainer.copy(alpha = .8f),
+                    fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+                if (phase.openEnded) {
+                    Text("$completed", color = onContainer, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
+                        lineHeight = 26.sp)
+                } else {
+                    val target = phase.target.coerceAtLeast(1)
+                    val currentWeek = if (completed >= target) phase.weeks else
+                        (completed / phase.unitsPerWeek.coerceAtLeast(1)) + 1
+                    Text(buildAnnotatedString {
+                        append("$currentWeek")
+                        withStyle(SpanStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                            color = onContainer.copy(alpha = .75f))) { append(" / ${phase.weeks}") }
+                    }, color = onContainer, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 26.sp)
+                }
+            }
         }
-        return
-    }
-    val target = phase.target.coerceAtLeast(1)
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp))
-        .background(CardBackground).padding(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-            Text(phase.name, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
-            val currentWeek = if (completed >= target) phase.weeks else
-                (completed / phase.unitsPerWeek.coerceAtLeast(1)) + 1
-            Text("$currentWeek / ${phase.weeks}",
-                color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
-            Spacer(Modifier.width(5.dp))
-            Icon(Icons.Outlined.ChevronRight, "Phase verwalten", tint = SubtleText,
-                modifier = Modifier.size(18.dp))
-        }
-        Spacer(Modifier.height(12.dp))
-        Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(6.dp)).background(FieldBackground)) {
-            Box(Modifier.fillMaxWidth((completed.toFloat() / target).coerceIn(0f, 1f))
-                .fillMaxHeight().background(MaterialTheme.colorScheme.primary))
-        }
-        Spacer(Modifier.height(8.dp))
-        Text("$completed von ${phase.target} Trainingseinheiten", color = SubtleText, fontSize = 11.sp)
-        if (completed >= target && phase.target > 0) {
-            Spacer(Modifier.height(9.dp))
-            TextButton(onClick = if (phase.finishedAt == null) onFinish else onSummary,
-                contentPadding = PaddingValues(0.dp)) {
-                Icon(Icons.Outlined.CheckCircleOutline, null, modifier = Modifier.size(17.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(if (phase.finishedAt == null) "Phase abschließen" else "Zusammenfassung ansehen",
-                    fontSize = 13.sp)
+        if (!phase.openEnded) {
+            val target = phase.target.coerceAtLeast(1)
+            Spacer(Modifier.height(14.dp))
+            Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(10.dp))
+                .background(onContainer.copy(alpha = .14f))) {
+                Box(Modifier.fillMaxWidth((completed.toFloat() / target).coerceIn(0f, 1f))
+                    .fillMaxHeight().clip(RoundedCornerShape(10.dp)).background(scheme.primary))
+            }
+            Spacer(Modifier.height(10.dp))
+            Text("$completed von ${phase.target} Trainingseinheiten", color = onContainer.copy(alpha = .85f),
+                fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            if (completed >= target && phase.target > 0) {
+                Spacer(Modifier.height(6.dp))
+                TextButton(onClick = if (phase.finishedAt == null) onFinish else onSummary,
+                    contentPadding = PaddingValues(0.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = onContainer)) {
+                    Icon(Icons.Outlined.CheckCircleOutline, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (phase.finishedAt == null) "Phase abschließen" else "Zusammenfassung ansehen",
+                        fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -341,41 +401,39 @@ private fun PhaseCard(phase: Phase, completed: Int,
 
 @Composable
 private fun WeekStrip(selected: Int, plans: List<DayPlan>, onSelect: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    val scheme = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         DAY_SHORT.forEachIndexed { index, label ->
             val day = plans[index]
             val available = day.enabled
             val hasExercises = available && day.exercises.isNotEmpty()
             val highlighted = selected == index
-            val accent = MaterialTheme.colorScheme.primary
+            val background = when {
+                highlighted && available -> scheme.primary
+                highlighted -> FieldBackground
+                available -> CardBackground
+                else -> Color.Transparent
+            }
+            val foreground = when {
+                highlighted && available -> scheme.onPrimary
+                available -> scheme.onSurface
+                highlighted -> SubtleText
+                else -> SubtleText.copy(alpha = .55f)
+            }
             Column(
-                modifier = Modifier.weight(1f).height(54.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(when {
-                        highlighted && available -> accent.copy(alpha = .15f)
-                        highlighted -> FieldBackground.copy(alpha = .40f)
-                        available -> FieldBackground.copy(alpha = .18f)
-                        else -> Color.Transparent
-                    })
-                    .border(1.dp, when {
-                        highlighted && available -> accent.copy(alpha = .32f)
-                        else -> Color.Transparent
-                    }, RoundedCornerShape(9.dp))
+                modifier = Modifier.weight(1f).height(58.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(background)
                     .clickable { onSelect(index) },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text(label,
-                    color = when {
-                        highlighted && available -> accent
-                        available -> Color(0xFFBCC0C7)
-                        else -> SubtleText.copy(alpha = .27f)
-                    }, fontSize = 12.sp,
-                    fontWeight = if (highlighted && available) FontWeight.SemiBold else FontWeight.Normal)
-                Spacer(Modifier.height(5.dp))
-                Box(Modifier.size(4.dp).clip(RoundedCornerShape(4.dp)).background(
+                Text(label, color = foreground, fontSize = 13.sp,
+                    fontWeight = if (highlighted && available) FontWeight.ExtraBold else FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Box(Modifier.size(5.dp).clip(RoundedCornerShape(5.dp)).background(
                     if (hasExercises) {
-                        if (highlighted) accent else SubtleText.copy(alpha = .75f)
+                        if (highlighted) scheme.onPrimary else SubtleText
                     } else Color.Transparent
                 ))
             }
@@ -385,7 +443,7 @@ private fun WeekStrip(selected: Int, plans: List<DayPlan>, onSelect: (Int) -> Un
 
 @Composable
 private fun ExerciseTile(
-    exercise: Exercise, choice: ExerciseChoice, data: AppData,
+    number: Int, exercise: Exercise, choice: ExerciseChoice, data: AppData,
     onEdit: () -> Unit, onAddAlternative: () -> Unit,
     onChoice: (ExerciseChoice) -> Unit, onValues: (String, Values) -> Unit
 ) {
@@ -398,35 +456,44 @@ private fun ExerciseTile(
     val current = data.valueFor(selectedId, base)
     val unavailable = choice.status == "unavailable" || choice.status == "skipped"
 
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp))
-        .background(CardBackground).padding(start = 12.dp, end = 5.dp, top = 10.dp, bottom = 10.dp)) {
+    val scheme = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
+        .background(CardBackground).padding(start = 14.dp, end = 8.dp, top = 14.dp, bottom = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(14.dp))
+                .background(if (unavailable) FieldBackground else scheme.primaryContainer),
+                contentAlignment = Alignment.Center) {
+                Text("$number", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold,
+                    color = if (unavailable) SubtleText else scheme.onPrimaryContainer)
+            }
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(if (replaced) alternative!!.name else exercise.name,
-                    fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 2)
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp, maxLines = 2)
                 Spacer(Modifier.height(3.dp))
                 Text(if (replaced) "${alternative!!.sets} Sätze · ${alternative.rest} s Pause"
                     else "${exercise.sets} Sätze · ${exercise.rest} s Pause",
-                    fontSize = 10.sp, color = SubtleText)
-                if (replaced) Text("Ersatz für ${exercise.name}", fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.primary)
+                    fontSize = 12.sp, color = SubtleText)
+                if (replaced) Text("Ersatz für ${exercise.name}", fontSize = 11.sp,
+                    color = scheme.primary)
             }
-            IconButton(onClick = onEdit, modifier = Modifier.size(42.dp)) {
+            IconButton(onClick = onEdit, modifier = Modifier.size(44.dp)) {
                 Icon(Icons.Outlined.Edit, "${exercise.name} bearbeiten", tint = SubtleText,
                     modifier = Modifier.size(19.dp))
             }
-            IconButton(onClick = { showAlternatives = true }, modifier = Modifier.size(42.dp)) {
+            IconButton(onClick = { showAlternatives = true }, modifier = Modifier.size(44.dp)) {
                 Icon(Icons.Outlined.SwapHoriz, "${exercise.name} nicht ausführbar / Ersatz wählen",
                     tint = if (unavailable || replaced) MaterialTheme.colorScheme.primary else SubtleText,
                     modifier = Modifier.size(21.dp))
             }
         }
         if (unavailable) {
-            Text("Nicht ausgeführt", color = SubtleText, fontSize = 12.sp,
-                modifier = Modifier.padding(top = 7.dp, bottom = 3.dp))
+            Text("Nicht ausgeführt", color = SubtleText, fontSize = 13.sp,
+                modifier = Modifier.padding(start = 52.dp, top = 8.dp))
         } else {
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.padding(end = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
                 SwipeNumberField(current.weight, "kg", Modifier.weight(1f), false) { value ->
                     onValues(selectedId, current.copy(weight = value))
                 }
@@ -491,7 +558,7 @@ private fun SwipeNumberField(
     val sounds = LocalRepavioSounds.current
     var accumulated by remember { mutableFloatStateOf(0f) }
     var dragNumber by remember { mutableDoubleStateOf(0.0) }
-    Row(modifier.height(40.dp).clip(RoundedCornerShape(7.dp)).background(FieldBackground)
+    Row(modifier.height(52.dp).clip(RoundedCornerShape(16.dp)).background(FieldBackground)
         .pointerInput(integer, stepPx) {
             detectDragGesturesAfterLongPress(
                 onDragStart = {
@@ -516,9 +583,9 @@ private fun SwipeNumberField(
             )
         }
         .clickable { editValue = value; editing = true }
-        .padding(horizontal = 10.dp),
+        .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.End) {
+        horizontalArrangement = Arrangement.Center) {
         AnimatedContent(targetState = value, label = "Zahlenrad", transitionSpec = {
             val goesUp = (targetState.replace(',', '.').toDoubleOrNull() ?: 0.0) >=
                 (initialState.replace(',', '.').toDoubleOrNull() ?: 0.0)
@@ -526,10 +593,11 @@ private fun SwipeNumberField(
             (slideInVertically { it * offset } + fadeIn()) togetherWith
                 (slideOutVertically { -it * offset } + fadeOut())
         }) { displayed ->
-            Text(displayed, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(displayed, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
         }
-        Spacer(Modifier.width(6.dp))
-        Text(suffix, fontSize = 10.sp, color = SubtleText)
+        Spacer(Modifier.width(5.dp))
+        Text(suffix, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = SubtleText,
+            modifier = Modifier.padding(top = 5.dp))
     }
     if (editing) {
         AlertDialog(
