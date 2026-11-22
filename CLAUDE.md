@@ -6,6 +6,8 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 ## Produktgrundsätze (nicht verwässern)
 - „So wenig Bedienung wie möglich, so viele Informationen wie nötig.“ Neue Funktionen nur nach Absprache.
 - Alle Daten lokal: kein Konto, keine Cloud, kein Backend, keine KI.
+- Profil (seit V1.4.2): Name, Geburtsdatum (Alter wird berechnet, nie gespeichert), Geschlecht m/w, Größe, Aktivität, Gewichtsverlauf (ein Eintrag pro Tag), Foto oder Avatar. **Verschlüsselt** mit Android-Keystore (AES-GCM) in `ProfileStore.kt`. In Backups nur, wenn ein Backup-Passwort gesetzt ist (PBKDF2-SHA256, Feld `profileEncrypted`); Trainingsdaten bleiben unverschlüsselt.
+- Ernährung: nur Bedarfsrechnung, kein Essens-Logging. Mifflin-St Jeor × Aktivität × Ziel (Aufbau +10 %, Halten, Definition −20 %); Protein 2,0 g/kg, Fett 0,9 g/kg, Rest Kohlenhydrate.
 - Pro Übung **ein** Gewichts- und **ein** Wiederholungswert für alle Sätze; keine Satz-für-Satz-Erfassung.
 - Alternativübungen sind nur Ersatz, kein zusätzlicher Block.
 - Nur gespeicherte Trainings zählen. Keine Nullwerte oder Lücken für Pausen, kein „verpasst“, keine Kalenderlogik für Phasen.
@@ -15,7 +17,7 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 - Gleichnamige Übungen teilen eine Identität (`exerciseKey`, normalisierter Name). Identitätslogik nicht ohne Rücksprache ändern.
 - Feste Muskelgruppen: Bauch, Beine, Bizeps, Brust, Rücken, Schulter. Nicht ohne Wunsch erweitern.
 - Sound: nur der abschaltbare Wisch-Sound. Kein Klick- oder Abschlusssound.
-- Design: Minimal Dark, Material You. Keine Bildschirmtitel. Seit V1.4.1 (an die MCI-App angelehnt, aber ohne deren Branding): kräftige Typografie, große Rundungen (Karten 20–24 dp), neutrale Flächen, Akzente nur aus dem System (`primary`, `primaryContainer`), Tab-Leiste nur mit Icons, Vollbildmodus im Training (nur Übungen + Button, nicht gespeichert, Zurück verlässt ihn).
+- Design: Minimal Dark, Material You. Keine Bildschirmtitel. Seit V1.4.1 (an die MCI-App angelehnt, aber ohne deren Branding): kräftige Typografie, große Rundungen (Karten 20–24 dp), neutrale Flächen, Akzente nur aus dem System (`primary`, `primaryContainer`), Tab-Leiste nur mit Icons (Training, Analyse, Ernährung, Profil; Einstellungen liegen im Profil), Vollbildmodus im Training (nur Übungen + Button, nicht gespeichert, Zurück verlässt ihn).
 - Nicht umsetzen ohne ausdrücklichen Wunsch: KI- oder Fragebogen-Trainingsplaner, Pausentimer, Einzelsatz-Erfassung, Cloud, Konten, Social, Werbung.
 
 ## Technische Fixpunkte
@@ -43,6 +45,7 @@ Nur `Sens4r/repavio` verändern. Vor Updates, die Daten betreffen, ein externes 
 | 1.3.5 | 20.11.2026 | Downloadmanager eingeführt; Installation ohne Play-Protect-Sperre bestätigt |
 | 1.3.6 | 21.11.2026 | Update 1.3.5 → 1.3.6 über den Downloadmanager auf dem Pixel bestätigt |
 | 1.4.0 | 21.11.2026 | „Keine Phase“, Analyse-Drill-down mit Fortschrittsgrafik, Calisthenics-Übungen, weniger empfindliches Wischen; Update und Funktionen auf dem Pixel bestätigt |
-| 1.4.1 | 22.11.2026 | Neues UI im MCI-Stil (Vorschau vom Nutzer freigegeben), Vollbildmodus, Icon-Tab-Leiste, Balkendiagramm im Übungsdetail, Einstellungen als Kategorie-Kacheln, schlankes Update-Popup; auf dem Pixel noch nicht bestätigt |
+| 1.4.1 | 22.11.2026 | Neues UI im MCI-Stil (Vorschau vom Nutzer freigegeben), Vollbildmodus, Icon-Tab-Leiste, Balkendiagramm im Übungsdetail, Einstellungen als Kategorie-Kacheln, schlankes Update-Popup; Update und UI auf dem Pixel bestätigt (Text in Einstellungs-Kacheln war abgeschnitten → in 1.4.2 behoben) |
+| 1.4.2 | 22.11.2026 | Profil (verschlüsselt, Avatar/Foto, Gewichtsverlauf, Alter automatisch), Ernährungs-Tab, Backup-Passwort, Einstellungen als Liste im Profil; auf dem Pixel noch nicht bestätigt |
 
 Offen: nichts Dringendes. Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.

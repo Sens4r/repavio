@@ -33,7 +33,10 @@ class LocalStore(private val context: Context) {
         prefs.edit().putString("state", encode(data).toString()).apply()
     }
 
-    fun exportJson(): String = encode(load()).toString(2)
+    /** Training data plus, only if a backup password is set, the encrypted profile. */
+    fun exportJson(): String = encode(load()).apply {
+        ProfileStore(context).backupBlob()?.let { put("profileEncrypted", it) }
+    }.toString(2)
 
     /** Refuse invalid backups without touching existing data. */
     fun importJson(json: String): AppData {
