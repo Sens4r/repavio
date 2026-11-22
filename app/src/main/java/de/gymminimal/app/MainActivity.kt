@@ -6,6 +6,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.outlined.Settings
 import android.os.Bundle
+import android.graphics.BitmapFactory
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.ui.graphics.asImageBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import kotlinx.coroutines.delay
@@ -84,6 +92,18 @@ fun RepavioApp() {
     var resetRequested by remember { mutableStateOf(false) }
     var showingBrand by remember { mutableStateOf(true) }
     var trainingFocus by remember { mutableStateOf(false) }
+    val profileStore = remember(context) { ProfileStore(context) }
+    var profile by remember { mutableStateOf(profileStore.load()) }
+    var photoBytes by remember { mutableStateOf(profileStore.loadPhoto()) }
+    val photo = remember(photoBytes) {
+        photoBytes?.let { runCatching { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }.getOrNull() }
+    }
+    var backupPasswordSet by remember { mutableStateOf(profileStore.hasBackupPassword()) }
+    var passwordBusy by remember { mutableStateOf(false) }
+    var pendingProfileBlob by remember { mutableStateOf<JSONObject?>(null) }
+    var restoreBusy by remember { mutableStateOf(false) }
+    var restoreFailed by remember { mutableStateOf(false) }
+    val updateProfile: (Profile) -> Unit = { next -> profile = next; profileStore.save(next) }
     val scope = rememberCoroutineScope()
     var availableUpdate by remember { mutableStateOf<RepavioRelease?>(null) }
     var checkingUpdates by remember { mutableStateOf(false) }
@@ -139,6 +159,17 @@ fun RepavioApp() {
         if (uri != null) try { backup.chooseFolder(uri) }
         catch (_: Exception) { importError = "Ordner konnte nicht für Backups freigegeben werden." }
     }
+    val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
+        if (uri != null) scope.launch {
+            val bytes = withContext(Dispatchers.IO) { profileStore.preparePhoto(uri) }
+            if (bytes == null) importError = "Bild konnte nicht gelesen werden."
+            else {
+                profileStore.savePhoto(bytes)
+                photoBytes = bytes
+                updateProfile(profile.copy(hasPhoto = true, avatar = ""))
+            }
+        }
+    }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val update: ((AppData) -> AppData) -> Unit = { transform ->
         val next = transform(app)
@@ -169,6 +200,8 @@ fun RepavioApp() {
                     0 -> TrainingScreen(app, update, focus = trainingFocus,
                         onFocusChange = { trainingFocus = it })
                     1 -> AnalyzeScreen(app, update)
+                    2 -> NutritionScreen(profile, onGoal = { updateProfile(profile.copy(goal = it)) },
+                        onOpenProfile = { tab = 3 })
                     else -> SettingsScreen(backup, sounds,
                         onExport = { exportLauncher.launch("repavio_Backup.json") },
                         onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
@@ -179,7 +212,35 @@ fun RepavioApp() {
                         },
                         onReset = { resetRequested = true },
                         onCheckUpdates = checkUpdates,
-                        updateStatus = updateStatus)
+                        updateStatus = updateStatus,
+                        profile = profile, photo = photo,
+                        onProfileChange = updateProfile,
+                        onPickPhoto = {
+                            photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        },
+                        onAvatar = { key ->
+                            profileStore.savePhoto(null); photoBytes = null
+                            updateProfile(profile.copy(avatar = key, hasPhoto = false))
+                        },
+                        onRemovePicture = {
+                            profileStore.savePhoto(null); photoBytes = null
+                            updateProfile(profile.copy(avatar = "", hasPhoto = false))
+                        },
+                        backupPasswordSet = backupPasswordSet,
+                        passwordBusy = passwordBusy,
+                        onSetBackupPassword = { password ->
+                            passwordBusy = true
+                            scope.launch {
+                                withContext(Dispatchers.Default) { profileStore.setBackupPassword(password) }
+                                backupPasswordSet = true
+                                passwordBusy = false
+                                backup.backupNow()
+                            }
+                        },
+                        onRemoveBackupPassword = {
+                            profileStore.removeBackupPassword()
+                            backupPasswordSet = false
+                        })
                 }
             }
         }
@@ -287,11 +348,38 @@ fun RepavioApp() {
                             val restored = store.importJson(pendingImport!!)
                             app = restored
                             tab = 0
+                            pendingProfileBlob = runCatching {
+                                JSONObject(pendingImport!!).optJSONObject("profileEncrypted")
+                            }.getOrNull()
+                            restoreFailed = false
                         } catch (_: Exception) { importError = "Backup ungültig oder beschädigt." }
                         pendingImport = null
                     }) { Text("Wiederherstellen") }
                 },
                 dismissButton = { TextButton(onClick = { pendingImport = null }) { Text("Abbrechen") } })
+        }
+        pendingProfileBlob?.let { blob ->
+            RestoreProfileDialog(restoreBusy, restoreFailed,
+                onRestore = { password ->
+                    restoreBusy = true
+                    scope.launch {
+                        val ok = withContext(Dispatchers.Default) {
+                            profileStore.restoreFromBackup(blob, password).also { success ->
+                                // Same password keeps future backups restorable on this device too.
+                                if (success) profileStore.setBackupPassword(password)
+                            }
+                        }
+                        restoreBusy = false
+                        if (ok) {
+                            profile = profileStore.load()
+                            photoBytes = profileStore.loadPhoto()
+                            backupPasswordSet = true
+                            pendingProfileBlob = null
+                            tab = 3
+                        } else restoreFailed = true
+                    }
+                },
+                onSkip = { pendingProfileBlob = null })
         }
         if (importError != null) {
             AlertDialog(onDismissRequest = { importError = null },
@@ -302,11 +390,15 @@ fun RepavioApp() {
             AlertDialog(
                 onDismissRequest = { resetRequested = false },
                 title = { Text("repavio zurücksetzen?") },
-                text = { Text("Alle Trainingsdaten, Pläne, Phasen, Tags, Entwürfe, Einstellungen und interne Backups werden dauerhaft entfernt. Bereits exportierte Dateien bleiben erhalten. Vorher ein Backup exportieren, falls du etwas behalten möchtest.") },
+                text = { Text("Alle Trainingsdaten, Pläne, Phasen, Tags, Entwürfe, Profil, Gewichtsverlauf, Einstellungen und interne Backups werden dauerhaft entfernt. Bereits exportierte Dateien bleiben erhalten. Vorher ein Backup exportieren, falls du etwas behalten möchtest.") },
                 confirmButton = {
                     TextButton(onClick = {
                         store.clear()
                         backup.clearLocalBackups()
+                        profileStore.clear()
+                        profile = Profile()
+                        photoBytes = null
+                        backupPasswordSet = false
                         app = initialData()
                         store.save(app)
                         sounds.setEnabled(true)
@@ -347,7 +439,8 @@ private fun IconTabBar(selected: Int, onSelect: (Int) -> Unit) {
     val tabs = listOf(
         Icons.Outlined.FitnessCenter to "Training",
         Icons.Outlined.BarChart to "Analyse",
-        Icons.Outlined.Settings to "Einstellungen"
+        Icons.Outlined.Restaurant to "Ernährung",
+        Icons.Outlined.Person to "Profil"
     )
     val scheme = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().background(CardBackground).navigationBarsPadding().height(64.dp)

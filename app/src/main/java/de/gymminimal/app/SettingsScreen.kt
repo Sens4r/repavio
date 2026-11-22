@@ -34,7 +34,17 @@ fun SettingsScreen(
     onRestore: (File) -> Unit,
     onReset: () -> Unit,
     onCheckUpdates: () -> Unit,
-    updateStatus: String?
+    updateStatus: String?,
+    profile: Profile = Profile(),
+    photo: androidx.compose.ui.graphics.ImageBitmap? = null,
+    onProfileChange: (Profile) -> Unit = {},
+    onPickPhoto: () -> Unit = {},
+    onAvatar: (String) -> Unit = {},
+    onRemovePicture: () -> Unit = {},
+    backupPasswordSet: Boolean = false,
+    passwordBusy: Boolean = false,
+    onSetBackupPassword: (String) -> Unit = {},
+    onRemoveBackupPassword: () -> Unit = {}
 ) {
     var backups by remember { mutableStateOf(backup.recentFiles()) }
     var showLocal by remember { mutableStateOf(false) }
@@ -43,39 +53,75 @@ fun SettingsScreen(
     var section by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val appVersion = remember { runCatching { RepavioUpdates.installedVersion(context) }.getOrDefault("?") }
+    var avatarDialog by remember { mutableStateOf(false) }
+    var editDialog by remember { mutableStateOf(false) }
+    var weightDialog by remember { mutableStateOf(false) }
+    var deleteWeight by remember { mutableStateOf<WeightEntry?>(null) }
+    var passwordDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(passwordBusy, backupPasswordSet) { if (!passwordBusy) passwordDialog = false }
     BackHandler(enabled = section != null) { section = null }
 
+    if (avatarDialog) AvatarDialog(profile,
+        onPickPhoto = { avatarDialog = false; onPickPhoto() },
+        onAvatar = { onAvatar(it) },
+        onRemove = { onRemovePicture(); avatarDialog = false },
+        onDismiss = { avatarDialog = false })
+    if (editDialog) ProfileEditDialog(profile, onSave = { onProfileChange(it); editDialog = false },
+        onDismiss = { editDialog = false })
+    if (weightDialog) WeightDialog(profile.currentWeight, onSave = { kg ->
+        addWeight(profile, kg, System.currentTimeMillis())?.let(onProfileChange)
+        weightDialog = false
+    }, onDismiss = { weightDialog = false })
+    deleteWeight?.let { entry ->
+        AlertDialog(onDismissRequest = { deleteWeight = null }, containerColor = CardBackground,
+            shape = RoundedCornerShape(28.dp),
+            title = { Text("Eintrag löschen?", fontWeight = FontWeight.ExtraBold) },
+            text = { Text("Der Gewichtseintrag wird aus dem Verlauf entfernt.", color = SubtleText) },
+            confirmButton = { TextButton(onClick = {
+                onProfileChange(deleteWeight(profile, entry.timestamp)); deleteWeight = null
+            }) { Text("Löschen", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { deleteWeight = null }) { Text("Abbrechen") } })
+    }
+    if (passwordDialog) BackupPasswordDialog(backupPasswordSet, passwordBusy,
+        onSet = onSetBackupPassword,
+        onRemove = { onRemoveBackupPassword(); passwordDialog = false },
+        onDismiss = { passwordDialog = false })
+
     if (section == null) {
-        val tiles = listOf(
-            Triple("backup", "Backup", Icons.Outlined.Backup),
-            Triple("bedienung", "Bedienung", Icons.Outlined.TouchApp),
-            Triple("app", "App & Updates", Icons.Outlined.SystemUpdate),
-            Triple("reset", "Zurücksetzen", Icons.Outlined.DeleteForever)
+        val rows = listOf(
+            Triple("backup", Icons.Outlined.Backup, "Backup" to "${backups.size} lokale Sicherungen" +
+                if (backupPasswordSet) " · Profil verschlüsselt" else ""),
+            Triple("bedienung", Icons.Outlined.TouchApp, "Bedienung" to if (soundEnabled) "Wisch-Sound an" else "Wisch-Sound aus"),
+            Triple("app", Icons.Outlined.SystemUpdate, "App & Updates" to "Version $appVersion"),
+            Triple("reset", Icons.Outlined.DeleteForever, "Zurücksetzen" to "Alle Daten auf dem Gerät löschen")
         )
-        val subtitles = mapOf(
-            "backup" to "${backups.size} lokale Sicherungen",
-            "bedienung" to if (soundEnabled) "Wisch-Sound an" else "Wisch-Sound aus",
-            "app" to "Version $appVersion",
-            "reset" to "Alle Daten löschen"
-        )
-        Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            tiles.chunked(2).forEach { pair ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    pair.forEach { (key, title, icon) ->
-                        Column(Modifier.weight(1f).height(112.dp).clip(RoundedCornerShape(22.dp))
-                            .background(CardBackground).clickable { section = key }.padding(16.dp),
-                            verticalArrangement = Arrangement.SpaceBetween) {
-                            Box(Modifier.size(40.dp).clip(RoundedCornerShape(14.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer),
+        LazyColumn(Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            profileOverview(profile, photo,
+                onAvatar = { avatarDialog = true }, onEdit = { editDialog = true }, onWeight = { section = "weight" })
+            item {
+                Text("Einstellungen", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.3).sp,
+                    modifier = Modifier.padding(start = 2.dp, top = 10.dp))
+            }
+            item {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardBackground)
+                    .padding(vertical = 4.dp)) {
+                    rows.forEachIndexed { index, (key, icon, texts) ->
+                        if (index > 0) HorizontalDivider(color = FieldBackground, modifier = Modifier.padding(start = 66.dp))
+                        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).clickable { section = key }
+                            .padding(start = 16.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(FieldBackground),
                                 contentAlignment = Alignment.Center) {
-                                Icon(icon, null, tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(22.dp))
+                                Icon(icon, null, modifier = Modifier.size(19.dp))
                             }
-                            Column {
-                                Text(title, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-                                Text(subtitles.getValue(key), fontSize = 12.sp, color = SubtleText, maxLines = 1)
+                            Spacer(Modifier.width(14.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(texts.first, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                Text(texts.second, fontSize = 12.sp, color = SubtleText)
                             }
+                            Icon(Icons.Outlined.ChevronRight, null, tint = SubtleText, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
@@ -85,7 +131,7 @@ fun SettingsScreen(
     }
 
     val titles = mapOf("backup" to "Backup", "bedienung" to "Bedienung", "app" to "App & Updates",
-        "reset" to "Zurücksetzen")
+        "reset" to "Zurücksetzen", "weight" to "Gewicht")
     LazyColumn(Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -99,6 +145,7 @@ fun SettingsScreen(
             }
         }
         when (section) {
+            "weight" -> weightPage(profile, onAdd = { weightDialog = true }, onDelete = { deleteWeight = it })
             "backup" -> {
                 item {
                     SettingRow("Automatische Backups", "Täglich, lokal auf dem Gerät", Icons.Outlined.Backup, null)
@@ -111,6 +158,10 @@ fun SettingsScreen(
                     SettingRow("Backup-Ordner", if (backup.selectedFolder() == null)
                         "Optional: Ordner für automatische Kopien auswählen" else "Externer Ordner ausgewählt",
                         Icons.Outlined.FolderOpen, onChooseFolder)
+                }
+                item {
+                    SettingRow("Backup-Passwort", if (backupPasswordSet) "Gesetzt · Profil wird verschlüsselt mitgesichert"
+                        else "Nicht gesetzt · Profil wird nicht mitgesichert", Icons.Outlined.Key) { passwordDialog = true }
                 }
                 item { SettingRow("Backup exportieren", "Sicherungsdatei speichern", Icons.Outlined.FileUpload, onExport) }
                 item { SettingRow("Backup importieren", "Eine Sicherungsdatei einlesen", Icons.Outlined.FileDownload, onImport) }

@@ -76,8 +76,9 @@ fun IntroTourDialog(onClose: () -> Unit) {
                             "eine Zahl direkt einzugeben. Oder länger gedrückt halten " +
                             "und nach oben bzw. unten wischen, um den Wert schnell zu ändern.")
                         5 -> Text("Im Tab „Analyse“ siehst du deine gespeicherten Trainingsfortschritte. " +
-                            "Unter „Einstellungen“ findest du Datensicherung, den Wisch-Sound und das " +
-                            "Zurücksetzen der App. Du kannst jetzt deine erste Phase anlegen.")
+                            "„Ernährung“ berechnet deinen Tagesbedarf aus dem Profil. Im „Profil“ findest du " +
+                            "deine Angaben, Datensicherung, den Wisch-Sound und das Zurücksetzen der App. " +
+                            "Du kannst jetzt deine erste Phase anlegen.")
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
