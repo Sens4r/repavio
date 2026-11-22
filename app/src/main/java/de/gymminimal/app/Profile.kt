@@ -5,6 +5,7 @@ import java.time.LocalDate
 import java.time.Period
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.ResolverStyle
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -51,7 +52,9 @@ const val FAT_G_PER_KG = 0.9
 fun activityLevel(key: String): Choice = ACTIVITY_LEVELS.firstOrNull { it.key == key } ?: ACTIVITY_LEVELS[2]
 fun nutritionGoal(key: String): Choice = NUTRITION_GOALS.firstOrNull { it.key == key } ?: NUTRITION_GOALS[0]
 
-private val GERMAN_DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.GERMANY)
+// STRICT: "31.02." is rejected instead of being silently corrected to the end of February.
+private val GERMAN_DATE = DateTimeFormatter.ofPattern("dd.MM.uuuu", Locale.GERMANY)
+    .withResolverStyle(ResolverStyle.STRICT)
 
 /** "TT.MM.JJJJ" → ISO date, or null if invalid or implausible. */
 fun parseBirthDate(input: String, today: LocalDate = LocalDate.now()): String? {
