@@ -32,7 +32,7 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 
 ## Website
 - `docs/index.html` → GitHub Pages aus `main`/`docs`, Adresse https://sens4r.github.io/repavio/. Eine Datei, kein Build, nur Google Fonts als Abhängigkeit.
-- Stil wie https://sens4r.github.io (Repo `Sens4r/sens4r.github.io`, raycast-inspiriert): Inter/JetBrains Mono, fast schwarz `#07060B`, Sensa-Logofarben, animierter Canvas-Hintergrund, `prefers-reduced-motion` beachten.
+- Stil wie https://sens4r.github.io (Repo `Sens4r/sens4r.github.io`, raycast-inspiriert): Inter/JetBrains Mono, fast schwarz `#07060B`, Sensa-Logofarben, `prefers-reduced-motion` beachten. Hero-Hintergrund bewusst eigenes Motiv (Diagrammraster, atmende Balken, steigende Fortschrittslinien in App-Blau), nicht die Sensa-Lichtstrahlen.
 - Versionen und APK-Link werden live aus der GitHub-Releases-API geladen; Funktionstexte nur aus Code/Release-Notes ableiten, nichts erfinden. Bei neuen Funktionen Karten/FAQ mitpflegen.
 - Kein Impressum (privates, nicht geschäftliches Projekt, wie die Sensa-Seite).
 

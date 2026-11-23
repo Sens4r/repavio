@@ -540,93 +540,104 @@ footer small{color:var(--dim);font-size:13px}
     el.style.setProperty('--my', (e.clientY - r.top) + 'px');
   }, { passive: true });
 
-  // ---------- Animierter Hintergrund (wie sens4r.github.io) ----------
+  // ---------- Animierter Hintergrund: Trainingsdiagramm ----------
+  // Eigenes Motiv für repavio: Diagrammraster, atmende Balken (wie im Übungsdetail)
+  // und steigende Fortschrittslinien, deren Spitze als Lichtpunkt nach rechts läuft.
   sky();
   function sky() {
     const cv = document.getElementById('sky'); if (!cv || !cv.getContext) return;
     const ctx = cv.getContext('2d');
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const COLORS = [[159,216,238],[0,120,193],[45,76,159],[76,36,132],[149,133,192],[220,192,222]];
-    let W = 0, H = 0, dpr = 1, grid = null, beams = [], pulses = [], stars = [], running = false, last = 0, t = 0;
+    const BLUE = '168,199,250', DEEP = '40,71,119', LILAC = '149,133,192', CYAN = '159,216,238';
+    let W = 0, H = 0, dpr = 1, bars = [], lines = [], dots = [], running = false, last = 0, t = 0;
     const mouse = { x: .5, y: .3, tx: .5, ty: .3 };
-    const G = 56;
-    function beamSprite(rgb, w, len) {
-      const pad = 80, c = document.createElement('canvas');
-      c.width = w + pad * 2; c.height = len + pad * 2;
-      const x = c.getContext('2d');
-      const g = x.createLinearGradient(0, pad, 0, pad + len);
-      const col = a => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`;
-      g.addColorStop(0, col(0)); g.addColorStop(.35, col(.9)); g.addColorStop(.6, col(.7)); g.addColorStop(1, col(0));
-      x.filter = 'blur(38px)'; x.fillStyle = g;
-      x.beginPath(); x.roundRect ? x.roundRect(pad, pad, w, len, w / 2) : x.rect(pad, pad, w, len); x.fill();
-      return c;
+
+    function curve(seed, rise, amp) {
+      // stetig steigende Kurve mit kleinen Rückschritten, wie echter Trainingsfortschritt
+      const pts = []; let v = 0, r = seed;
+      const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+      for (let i = 0; i <= 40; i++) { v += rise + (rnd() - .42) * amp; pts.push(v); }
+      const max = Math.max(...pts), min = Math.min(...pts);
+      return pts.map(p => (p - min) / (max - min || 1));
     }
+
     function build() {
       dpr = Math.min(devicePixelRatio || 1, 1.5);
       W = cv.clientWidth; H = cv.clientHeight;
       cv.width = W * dpr; cv.height = H * dpr;
-      const len = H * 1.2, scale = Math.min(1, W / 1200);
-      const spec = [
-        { c: 0, x: .22, a:  45, w: 120, o: .38, sp: .07, amp: 70 },
-        { c: 1, x: .38, a:  45, w: 150, o: .5,  sp: .05, amp: 90 },
-        { c: 2, x: .47, a:  45, w: 90,  o: .42, sp: .09, amp: 60 },
-        { c: 3, x: .55, a: -45, w: 170, o: .7,  sp: .06, amp: 80 },
-        { c: 4, x: .66, a: -45, w: 110, o: .42, sp: .08, amp: 70 },
-        { c: 5, x: .80, a: -45, w: 120, o: .3,  sp: .05, amp: 90 }
+      const n = Math.max(14, Math.round(W / 34));
+      bars = Array.from({ length: n }, (_, i) => ({ i, base: .25 + .55 * (i / n) + Math.random() * .18, ph: Math.random() * 6.28, sp: .25 + Math.random() * .35 }));
+      lines = [
+        { pts: curve(7, 1, 2.2), col: BLUE, y0: .78, y1: .30, w: 2.4, sp: .045, off: 0 },
+        { pts: curve(31, 1, 2.8), col: LILAC, y0: .86, y1: .44, w: 1.8, sp: .035, off: .35 },
+        { pts: curve(57, 1, 1.8), col: CYAN, y0: .70, y1: .20, w: 1.4, sp: .055, off: .7 }
       ];
-      beams = spec.map((b, i) => ({ ...b, img: beamSprite(COLORS[b.c], b.w * scale + 30, len), ph: i * 1.7 }));
-      grid = document.createElement('canvas'); grid.width = W * dpr; grid.height = H * dpr;
-      const g = grid.getContext('2d'); g.scale(dpr, dpr);
-      g.strokeStyle = 'rgba(255,255,255,.035)'; g.lineWidth = 1; g.beginPath();
-      for (let c = -H; c < W + H; c += G) { g.moveTo(c, 0); g.lineTo(c + H, H); g.moveTo(c, 0); g.lineTo(c - H, H); }
-      g.stroke();
-      g.fillStyle = 'rgba(255,255,255,.07)';
-      for (let y = 0; y <= H; y += G / 2) for (let x = ((y / (G / 2)) % 2 ? G / 2 : 0); x <= W; x += G) g.fillRect(x - .75, y - .75, 1.5, 1.5);
-      stars = Array.from({ length: Math.round(W * H / 11000) }, () => ({ x: Math.random() * W, y: Math.random() * H * .7, r: Math.random() * 1.1 + .2, ph: Math.random() * 6.28, sp: .6 + Math.random() * 1.4 }));
-      pulses = [];
+      dots = Array.from({ length: Math.round(W * H / 16000) }, () => ({ x: Math.random() * W, y: Math.random() * H * .7, r: Math.random() * 1.1 + .3, ph: Math.random() * 6.28, sp: .5 + Math.random() }));
     }
-    function spawnPulse() {
-      const dir = Math.random() < .5 ? 1 : -1;
-      const k = Math.round((Math.random() * (W + H) - (dir > 0 ? H : 0)) / G);
-      const col = COLORS[[0, 0, 4, 5, 1][Math.floor(Math.random() * 5)]].join(',');
-      pulses.push({ x: k * G, y: 0, dir, v: 70 + Math.random() * 90, len: 60 + Math.random() * 90, col, life: 0 });
+
+    function at(L, u) { // Position auf einer Linie bei u ∈ [0,1]
+      const k = u * (L.pts.length - 1), i = Math.floor(k), f = k - i;
+      const v = L.pts[i] + ((L.pts[Math.min(i + 1, L.pts.length - 1)] - L.pts[i]) * f);
+      return [W * (.04 + u * .92), H * (L.y0 + (L.y1 - L.y0) * v)];
     }
+
     function frame(now) {
       const dt = Math.min((now - (last || now)) / 1000, .05); last = now; t += dt;
       mouse.x += (mouse.tx - mouse.x) * .04; mouse.y += (mouse.ty - mouse.y) * .04;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
-      ctx.globalAlpha = .75 + Math.sin(t * .5) * .25;
-      ctx.drawImage(grid, 0, 0, W, H);
-      ctx.globalAlpha = 1;
+      const px = (mouse.x - .5) * 24, py = (mouse.y - .3) * 12;
+
+      // Lichtfelder in den App-Farben
+      const glow = (x, y, r, col, a) => { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(${col},${a})`); g.addColorStop(1, `rgba(${col},0)`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); };
+      glow(W * .5 + px, H * .18, Math.max(W, H) * .55, DEEP, .55 + .08 * Math.sin(t * .4));
+      glow(W * .82 - px, H * .1, W * .35, LILAC, .10);
+      glow(W * .15 + px, H * .25, W * .3, CYAN, .06);
+
+      // horizontales Diagrammraster
+      ctx.strokeStyle = 'rgba(255,255,255,.045)'; ctx.lineWidth = 1; ctx.beginPath();
+      for (let y = H * .14; y < H * .95; y += 52) { ctx.moveTo(0, Math.round(y) + .5); ctx.lineTo(W, Math.round(y) + .5); }
+      ctx.stroke();
+
+      // atmende Balken am Boden
+      const bw = W / bars.length;
+      for (const b of bars) {
+        const h = H * .42 * (b.base * (.82 + .18 * Math.sin(t * b.sp + b.ph)));
+        const x = b.i * bw + bw * .22, y = H * .95 - h;
+        const g = ctx.createLinearGradient(0, y, 0, H * .95);
+        g.addColorStop(0, `rgba(${BLUE},.13)`); g.addColorStop(1, `rgba(${BLUE},0)`);
+        ctx.fillStyle = g; ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(x, y, bw * .56, h, [Math.min(8, bw * .2), Math.min(8, bw * .2), 0, 0]) : ctx.rect(x, y, bw * .56, h);
+        ctx.fill();
+      }
+
+      // Fortschrittslinien: werden von links aufgebaut, Spitze leuchtet, dann neu
       ctx.globalCompositeOperation = 'lighter';
-      const px = (mouse.x - .5) * 40, py = (mouse.y - .3) * 20;
-      for (const b of beams) {
-        const cx = b.x * W + Math.sin(t * b.sp * 6.28 + b.ph) * b.amp + px * (b.a > 0 ? 1 : -1);
-        const cy = H * .26 + Math.cos(t * b.sp * 4 + b.ph) * 20 + py;
-        const o = b.o * (.75 + .25 * Math.sin(t * b.sp * 9 + b.ph * 2));
-        ctx.save(); ctx.translate(cx, cy); ctx.rotate(b.a * Math.PI / 180);
-        ctx.globalAlpha = o; ctx.drawImage(b.img, -b.img.width / 2, -b.img.height / 2);
+      for (const L of lines) {
+        const u = reduce ? 1 : ((t * L.sp + L.off) % 1.25) / 1.0;
+        const end = Math.min(u, 1), fade = u > 1 ? 1 - (u - 1) / .25 : 1;
+        ctx.save(); ctx.translate(px * .6, py * .6);
+        ctx.shadowColor = `rgba(${L.col},.8)`; ctx.shadowBlur = 14;
+        ctx.strokeStyle = `rgba(${L.col},${.55 * fade})`; ctx.lineWidth = L.w; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        ctx.beginPath();
+        const steps = Math.max(2, Math.round(end * 160));
+        for (let k = 0; k <= steps; k++) { const [x, y] = at(L, end * k / steps); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+        ctx.stroke();
+        const [hx, hy] = at(L, end);
+        ctx.shadowBlur = 24; ctx.fillStyle = `rgba(${L.col},${fade})`;
+        ctx.beginPath(); ctx.arc(hx, hy, 3.2, 0, 6.28); ctx.fill();
         ctx.restore();
       }
-      if (!reduce && Math.random() < dt * 2.2 && pulses.length < 14) spawnPulse();
-      for (const p of pulses) {
-        p.y += p.v * dt; p.x += p.v * dt * p.dir; p.life += dt;
-        const fade = Math.max(0, 1 - p.y / (H * .7)) * Math.min(1, p.life * 2);
-        const tx = p.x - p.dir * p.len * .7071, ty = p.y - p.len * .7071;
-        const g = ctx.createLinearGradient(tx, ty, p.x, p.y);
-        g.addColorStop(0, `rgba(${p.col},0)`); g.addColorStop(1, `rgba(${p.col},${.85 * fade})`);
-        ctx.strokeStyle = g; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(p.x, p.y); ctx.stroke();
-        ctx.fillStyle = `rgba(${p.col},${fade})`; ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, 6.28); ctx.fill();
-      }
-      pulses = pulses.filter(p => p.y < H * .75);
-      for (const s of stars) {
-        const a = .15 + .35 * (.5 + .5 * Math.sin(t * s.sp + s.ph));
-        ctx.fillStyle = `rgba(230,236,255,${a})`; ctx.fillRect(s.x, s.y, s.r, s.r);
+
+      // feine Punkte
+      for (const d of dots) {
+        const a = .12 + .3 * (.5 + .5 * Math.sin(t * d.sp + d.ph));
+        ctx.fillStyle = `rgba(214,227,255,${a})`; ctx.fillRect(d.x, d.y, d.r, d.r);
       }
       ctx.globalCompositeOperation = 'source-over';
       if (running) requestAnimationFrame(frame);
     }
+
     function start() { if (running || reduce) return; running = true; last = 0; requestAnimationFrame(frame); }
     function stop() { running = false; }
     build();
