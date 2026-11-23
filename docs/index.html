@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>repavio – Das minimalistische Trainingstagebuch für Android</title>
+<meta name="description" content="repavio ist ein minimalistisches Trainingstagebuch für Android: ILB-Phasen, Analyse, Ernährungsbedarf. Alles lokal, ohne Konto, ohne Werbung. Kostenlos und quelloffen.">
+<meta name="theme-color" content="#07060B">
+<meta property="og:title" content="repavio – Training notieren, nicht verwalten.">
+<meta property="og:description" content="Minimalistisches Trainingstagebuch für Android. Lokal, ohne Konto, quelloffen.">
+<meta property="og:image" content="https://sens4r.github.io/repavio/assets/og.png">
+<meta property="og:type" content="website">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" type="image/png" href="assets/repavio-icon-64.png">
+<link rel="apple-touch-icon" href="assets/repavio-icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07060B; --bg2:#0C0A13; --surface:#110F1A; --surface2:#16131F;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
+  --text:#F4F3FA; --muted:#9C99AE; --dim:#6B6880;
+  --cyan:#9FD8EE; --blue:#0078C1; --indigo:#2D4C9F; --violet:#4C2484; --lilac:#9585C0; --pink:#DCC0DE;
+  --grad:linear-gradient(90deg,var(--cyan),#C3CDE8 50%,var(--pink));
+  --r:16px; --max:1120px;
+  --sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font:400 16px/1.6 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+img,svg{display:block}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
+::selection{background:rgba(159,216,238,.3)}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:3px;border-radius:6px}
+
+/* Nav */
+.nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(160%) blur(14px);-webkit-backdrop-filter:saturate(160%) blur(14px);background:rgba(7,6,11,.72);border-bottom:1px solid transparent;transition:border-color .2s}
+.nav.scrolled{border-bottom-color:var(--line)}
+.nav .wrap{display:flex;align-items:center;height:64px;gap:32px}
+.brand img{height:18px;width:auto}
+.nav-links{display:flex;gap:4px;margin-left:auto;align-items:center}
+.nav-links a{font-size:14px;color:var(--muted);padding:6px 12px;border-radius:8px;transition:color .15s,background .15s}
+.nav-links a:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.btn{display:inline-flex;align-items:center;gap:8px;font:500 14px/1 var(--sans);padding:11px 18px;border-radius:10px;border:1px solid var(--line2);background:rgba(255,255,255,.04);color:var(--text);transition:background .15s,border-color .15s;cursor:pointer;white-space:nowrap}
+.btn:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2)}
+.btn.primary{background:var(--text);color:#0B0912;border-color:var(--text)}
+.btn.primary:hover{background:#fff}
+.btn.sm{padding:8px 14px;font-size:13px}
+.btn svg{width:16px;height:16px}
+.nav-links .btn{color:#0B0912;margin-left:8px}
+.nav-links .btn:hover{background:#fff;color:#0B0912}
+
+/* Hero */
+.hero{position:relative;padding:112px 0 40px;text-align:center;isolation:isolate}
+#sky{position:absolute;left:0;top:-64px;width:100%;height:calc(100% + 64px);z-index:-1;pointer-events:none;
+  -webkit-mask-image:linear-gradient(180deg,#000 0,#000 50%,transparent 90%);mask-image:linear-gradient(180deg,#000 0,#000 50%,transparent 90%);opacity:0;transition:opacity 1.6s ease}
+#sky.on{opacity:1}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);border:1px solid var(--line2);background:rgba(255,255,255,.03);border-radius:999px;padding:6px 14px 6px 8px;margin-bottom:28px}
+.eyebrow b{font-weight:500;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan);margin-left:6px;position:relative}
+.eyebrow .dot::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--cyan);animation:ping 2.4s cubic-bezier(0,0,.2,1) infinite}
+@keyframes ping{0%{transform:scale(.6);opacity:.9}100%{transform:scale(2.4);opacity:0}}
+h1{font-size:clamp(40px,7vw,76px);line-height:1.04;letter-spacing:-.035em;font-weight:600;max-width:900px;margin:0 auto}
+h1 .ln{display:block}
+h1 .g{background:linear-gradient(90deg,var(--cyan),#B9C3EC 25%,var(--pink) 50%,#B9C3EC 75%,var(--cyan));background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 9s linear infinite}
+@keyframes shimmer{to{background-position:-200% 0}}
+.lead{font-size:clamp(17px,2vw,19px);color:var(--muted);max-width:620px;margin:24px auto 0}
+.cta{display:flex;gap:12px;justify-content:center;margin-top:36px;flex-wrap:wrap}
+.meta{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-top:22px;font:400 12px var(--mono);color:var(--dim)}
+.meta span{display:flex;align-items:center;gap:7px}
+.meta i{width:5px;height:5px;border-radius:50%;background:var(--lilac)}
+.intro{opacity:0;filter:blur(10px);transform:translateY(18px);animation:intro 1s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:calc(var(--d,0) * 110ms + 120ms)}
+@keyframes intro{to{opacity:1;filter:none;transform:none}}
+
+/* Phones */
+.phones{display:flex;justify-content:center;align-items:flex-end;gap:28px;margin-top:72px;perspective:1600px}
+.phone{width:264px;height:548px;border-radius:42px;background:#000;padding:9px;flex:none;position:relative;
+  box-shadow:0 0 0 1px rgba(255,255,255,.1),0 0 0 7px #17151F,0 0 0 8px rgba(255,255,255,.08),0 50px 100px -20px rgba(0,0,0,.8),0 30px 120px -30px var(--glow,rgba(45,76,159,.6))}
+.phones .phone:nth-child(1){transform:translateY(36px) rotate(-4deg);--glow:rgba(0,120,193,.45)}
+.phones .phone:nth-child(2){z-index:2;--glow:rgba(76,36,132,.7)}
+.phones .phone:nth-child(3){transform:translateY(36px) rotate(4deg);--glow:rgba(149,133,192,.45)}
+.float{animation:float 8s ease-in-out infinite}
+.phones .phone:nth-child(2) .float{animation-delay:-2.6s}
+.phones .phone:nth-child(3) .float{animation-delay:-5.2s}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.screen{width:100%;height:100%;border-radius:34px;overflow:hidden;background:#111318;color:#E2E2E9;display:flex;flex-direction:column;font-size:11px;line-height:1.35;text-align:left}
+.sb{display:flex;justify-content:space-between;padding:11px 22px 6px;font:500 10.5px var(--sans);color:#C7C9D1;position:relative}
+.sb .cam{width:10px;height:10px;border-radius:50%;background:#000;box-shadow:0 0 0 2px #222;position:absolute;left:50%;top:11px;transform:translateX(-50%)}
+.sc{flex:1;padding:6px 12px 0;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.phase{border-radius:20px;background:#284777;color:#D6E3FF;padding:13px 14px}
+.phase .row{display:flex;justify-content:space-between;align-items:flex-start}
+.phase .t{font-size:18px;font-weight:700;letter-spacing:-.02em}
+.phase .k{font-size:8px;letter-spacing:.1em;opacity:.8;text-align:right}
+.phase .w{font-size:16px;font-weight:700;text-align:right}
+.phase .w small{font-size:10px;opacity:.75}
+.bar{height:7px;border-radius:9px;background:rgba(214,227,255,.14);margin-top:10px;overflow:hidden}
+.bar i{display:block;height:100%;width:34%;background:#A8C7FA;border-radius:9px;animation:grow 2.2s cubic-bezier(.2,.7,.2,1) both .6s}
+@keyframes grow{from{width:0}}
+.phase .s{font-size:10px;opacity:.85;margin-top:7px}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.days span{height:38px;border-radius:13px;display:grid;place-items:center;font-weight:600;font-size:10px;color:#7E828C}
+.days span.a{background:#1B1D22;color:#E2E2E9}
+.days span.on{background:#A8C7FA;color:#062E6F;font-weight:800}
+.dayh{display:flex;justify-content:space-between;align-items:flex-end;padding:2px 2px 0}
+.dayh b{font-size:20px;letter-spacing:-.03em;display:block}
+.dayh .chips{display:flex;gap:4px;margin-top:4px}
+.dayh .chips span{font-size:9px;padding:3px 8px;border-radius:9px;background:#272A30;font-weight:600}
+.dayh small{color:#A9ADB6;font-size:9.5px}
+.ex{background:#1B1D22;border-radius:18px;padding:10px 10px 10px}
+.ex .top{display:flex;align-items:center;gap:8px}
+.ex .n{width:26px;height:26px;border-radius:9px;background:#284777;color:#D6E3FF;display:grid;place-items:center;font-weight:800;font-size:11px;flex:none}
+.ex .nm{font-weight:700;font-size:12px;flex:1}
+.ex .nm small{display:block;font-weight:400;color:#A9ADB6;font-size:9.5px}
+.ex .vals{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.ex .vals div{background:#272A30;border-radius:11px;padding:7px 0;text-align:center;font-size:15px;font-weight:800}
+.ex .vals small{font-size:9px;color:#A9ADB6;font-weight:600}
+.fin{border-radius:999px;background:#A8C7FA;color:#062E6F;text-align:center;font-weight:800;padding:11px;font-size:12px;margin:2px 0 6px}
+.tabs{display:flex;justify-content:space-around;align-items:center;height:46px;background:#1B1D22}
+.tabs i{width:44px;height:24px;border-radius:12px;display:grid;place-items:center;color:#A9ADB6}
+.tabs i.on{background:#284777;color:#D6E3FF}
+.tabs svg{width:15px;height:15px}
+.pill{align-self:flex-start;background:#272A30;border-radius:999px;padding:6px 12px;font-weight:700;font-size:10.5px}
+.pill span{color:#A9ADB6;font-weight:500}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.stats div{background:#1B1D22;border-radius:14px;padding:8px 11px;display:flex;justify-content:space-between;align-items:baseline;color:#A9ADB6;font-size:10px}
+.stats b{color:#E2E2E9;font-size:14px}
+.card-s{background:#1B1D22;border-radius:20px;padding:12px 13px}
+.card-s .k{font-size:8.5px;letter-spacing:.1em;color:#A9ADB6;font-weight:700}
+.card-s .big{font-size:28px;font-weight:800;letter-spacing:-.04em;color:#A8C7FA;line-height:1.1}
+.card-s svg{width:100%;height:78px;margin-top:6px}
+.h3s{font-size:14px;font-weight:800;padding:4px 2px 0}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tiles div{background:#1B1D22;border-radius:15px;padding:9px 11px;font-weight:800;font-size:12px}
+.tiles small{display:block;color:#A9ADB6;font-weight:400;font-size:9.5px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:#1B1D22;border-radius:18px;padding:3px;gap:3px}
+.seg span{text-align:center;padding:8px 0;border-radius:15px;font-weight:600;font-size:10.5px}
+.seg span.on{background:#A8C7FA;color:#062E6F;font-weight:800}
+.need{background:#284777;color:#D6E3FF;border-radius:20px;padding:14px}
+.need .k{font-size:8.5px;letter-spacing:.1em;opacity:.8;font-weight:700}
+.need .v{font-size:32px;font-weight:800;letter-spacing:-.04em;line-height:1.1}
+.need .v small{font-size:13px;opacity:.75}
+.need .split{display:flex;gap:3px;height:7px;border-radius:7px;overflow:hidden;margin-top:12px}
+.need .split i{display:block}
+.macros{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.macros div{background:#1B1D22;border-radius:15px;padding:9px 9px;font-size:9.5px;color:#A9ADB6}
+.macros b{display:block;color:#E2E2E9;font-size:16px;margin:2px 0}
+.rows{background:#1B1D22;border-radius:15px;padding:2px 11px}
+.rows div{display:flex;justify-content:space-between;padding:8px 0;font-size:10px;color:#A9ADB6;border-top:1px solid #272A30}
+.rows div:first-child{border-top:0}
+.rows b{color:#E2E2E9}
+
+/* Sections */
+section{padding:110px 0}
+.sec-head{max-width:640px;margin-bottom:56px}
+.sec-head.center{text-align:center;margin-left:auto;margin-right:auto}
+.kicker{font:500 13px var(--mono);color:var(--cyan);letter-spacing:.02em;margin-bottom:14px}
+h2{font-size:clamp(32px,4.4vw,48px);line-height:1.08;letter-spacing:-.03em;font-weight:600}
+.sec-head p{color:var(--muted);font-size:18px;margin-top:16px}
+.spot{position:relative;overflow:hidden}
+.spot::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .3s;
+  background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),rgba(159,216,238,.09),rgba(149,133,192,.05) 35%,transparent 60%)}
+.spot:hover::after{opacity:1}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card{border:1px solid var(--line);border-radius:var(--r);padding:26px;background:linear-gradient(180deg,var(--surface),var(--bg2));transition:border-color .2s}
+.card:hover{border-color:var(--line2)}
+.card .ic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:rgba(159,216,238,.08);border:1px solid rgba(159,216,238,.16);color:var(--cyan);margin-bottom:18px}
+.card .ic svg{width:18px;height:18px}
+.card h3{font-size:16px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px}
+.card p{font-size:14px;color:var(--muted);line-height:1.55}
+
+/* Steps */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;counter-reset:s}
+.step{border:1px solid var(--line);border-radius:var(--r);padding:24px;background:linear-gradient(180deg,var(--surface),var(--bg2))}
+.step .no{font:500 12px var(--mono);color:var(--cyan);margin-bottom:22px;display:flex;align-items:center;gap:10px}
+.step .no::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(159,216,238,.4),transparent)}
+.step h3{font-size:16px;font-weight:600;margin-bottom:6px}
+.step p{font-size:14px;color:var(--muted)}
+.formula{margin-top:16px;border:1px solid var(--line);border-radius:var(--r);padding:18px 22px;font:400 14px var(--mono);color:var(--muted);background:var(--bg2);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.formula b{color:var(--text);font-weight:500}
+
+/* Privacy panel */
+.panel{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;border:1px solid var(--line);border-radius:28px;padding:56px;position:relative;
+  background:radial-gradient(600px 300px at 90% 0%,rgba(45,76,159,.28),transparent 70%),linear-gradient(180deg,var(--surface),var(--bg2))}
+.panel::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(180deg,rgba(255,255,255,.12),transparent 40%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.panel p.lead2{color:var(--muted);margin-top:16px;font-size:17px}
+.list{list-style:none;display:flex;flex-direction:column;gap:14px}
+.list li{display:flex;gap:14px;align-items:flex-start;border:1px solid var(--line);border-radius:14px;padding:16px 18px;background:rgba(255,255,255,.02)}
+.list li svg{width:18px;height:18px;flex:none;color:var(--cyan);margin-top:2px}
+.list b{display:block;font-weight:600;font-size:15px}
+.list span{font-size:14px;color:var(--muted)}
+
+/* Install */
+.install{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}
+.ol{list-style:none;counter-reset:i;display:flex;flex-direction:column;gap:12px}
+.ol li{counter-increment:i;display:flex;gap:16px;border:1px solid var(--line);border-radius:var(--r);padding:20px;background:linear-gradient(180deg,var(--surface),var(--bg2))}
+.ol li::before{content:counter(i);flex:none;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font:500 13px var(--mono);color:var(--cyan);background:rgba(159,216,238,.08);border:1px solid rgba(159,216,238,.16)}
+.ol b{display:block;font-weight:600}
+.ol span{font-size:14px;color:var(--muted)}
+.dl{border:1px solid var(--line);border-radius:var(--r);padding:28px;background:radial-gradient(400px 200px at 50% 0%,rgba(76,36,132,.35),transparent 70%),linear-gradient(180deg,var(--surface),var(--bg2));display:flex;flex-direction:column;gap:16px}
+.dl .ver{font:500 13px var(--mono);color:var(--cyan)}
+.dl h3{font-size:26px;letter-spacing:-.02em;font-weight:600}
+.dl dl{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:14px;margin-top:4px}
+.dl dt{color:var(--dim)}
+.dl dd{color:var(--text)}
+.dl .btn{justify-content:center}
+
+/* Changelog */
+.log{display:flex;flex-direction:column;gap:12px}
+.rel{display:grid;grid-template-columns:150px 1fr;gap:24px;border:1px solid var(--line);border-radius:var(--r);padding:22px 24px;background:linear-gradient(180deg,var(--surface),var(--bg2))}
+.rel .tag{font:500 14px var(--mono);color:var(--text)}
+.rel .tag small{display:block;color:var(--dim);font-size:12px;margin-top:4px}
+.rel .tag em{display:inline-block;font-style:normal;font-size:11px;color:var(--cyan);border:1px solid rgba(159,216,238,.25);border-radius:999px;padding:2px 8px;margin-top:8px}
+.rel ul{list-style:none;display:flex;flex-direction:column;gap:6px}
+.rel li{font-size:14px;color:var(--muted);padding-left:16px;position:relative}
+.rel li::before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:var(--lilac)}
+.rel p{font-size:14px;color:var(--muted)}
+.log-foot{margin-top:18px;font:400 12px var(--mono);color:var(--dim);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.log-foot a{color:var(--muted)}
+.log-foot a:hover{color:var(--text)}
+
+/* FAQ */
+.faq{max-width:780px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.faq details{border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--surface),var(--bg2));transition:border-color .2s}
+.faq details[open]{border-color:var(--line2)}
+.faq summary{list-style:none;cursor:pointer;padding:18px 22px;font-weight:500;display:flex;justify-content:space-between;gap:16px;align-items:center}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";font:400 20px var(--mono);color:var(--dim);transition:transform .2s}
+.faq details[open] summary::after{transform:rotate(45deg)}
+.faq details p{padding:0 22px 20px;color:var(--muted);font-size:15px}
+
+/* Final + footer */
+.final{text-align:center;border:1px solid var(--line);border-radius:28px;padding:80px 24px;background:radial-gradient(500px 220px at 50% 0%,rgba(76,36,132,.35),transparent 70%),linear-gradient(180deg,var(--surface),var(--bg))}
+.final p{color:var(--muted);max-width:520px;margin:16px auto 0;font-size:18px}
+footer{border-top:1px solid var(--line);padding:40px 0 56px;margin-top:110px}
+footer .wrap{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+footer .by{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+footer .by img{width:18px;height:18px}
+footer .by a:hover{color:var(--text)}
+footer nav{display:flex;gap:20px;font-size:13px;color:var(--muted)}
+footer nav a:hover{color:var(--text)}
+footer small{color:var(--dim);font-size:13px}
+
+.rv{opacity:0;transform:translateY(24px);filter:blur(6px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1),filter .9s;transition-delay:calc(var(--i,0) * 90ms)}
+.rv.in{opacity:1;transform:none;filter:none}
+@media (prefers-reduced-motion:reduce){.rv,.intro{opacity:1;transform:none;filter:none;transition:none;animation:none}.float,h1 .g,.eyebrow .dot::after,.bar i{animation:none}html{scroll-behavior:auto}}
+
+@media (max-width:960px){
+  .grid3{grid-template-columns:1fr 1fr}
+  .steps{grid-template-columns:1fr 1fr}
+  .panel{grid-template-columns:1fr;padding:36px 24px;gap:32px}
+  .install{grid-template-columns:1fr}
+  .phones .phone:nth-child(1),.phones .phone:nth-child(3){display:none}
+}
+@media (max-width:640px){
+  .nav-links a.hide-s{display:none}
+  .hero{padding:72px 0 24px}
+  section{padding:80px 0}
+  .grid3,.steps{grid-template-columns:1fr}
+  .rel{grid-template-columns:1fr;gap:12px}
+  .phones{margin-top:48px}
+  .spot::after{display:none}
+}
+</style>
+</head>
+<body>
+
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="repavio – Startseite"><img src="assets/repavio-wordmark.png" alt="repavio" width="117" height="18"></a>
+    <nav class="nav-links" aria-label="Hauptnavigation">
+      <a href="#funktionen" class="hide-s">Funktionen</a>
+      <a href="#datenhoheit" class="hide-s">Datenhoheit</a>
+      <a href="#versionen" class="hide-s">Versionen</a>
+      <a href="#faq" class="hide-s">FAQ</a>
+      <a class="btn sm primary" href="#download">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <canvas id="sky" aria-hidden="true"></canvas>
+    <div class="wrap">
+      <a class="eyebrow intro" style="--d:0" href="#versionen"><span class="dot"></span><span>Neu: <b id="heroVer">repavio 1.4.3</b> <span id="heroNote">mit Icon in deinen Systemfarben</span></span></a>
+      <h1><span class="ln intro" style="--d:1">Training notieren.</span><span class="ln intro" style="--d:2"><span class="g">Nicht verwalten.</span></span></h1>
+      <p class="lead intro" style="--d:3">repavio ist ein minimalistisches Trainingstagebuch für Android. So wenig Bedienung wie möglich, so viele Informationen wie nötig – und alles bleibt auf deinem Handy.</p>
+      <div class="cta intro" style="--d:4">
+        <a class="btn primary" href="https://github.com/Sens4r/repavio/releases/latest" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M3 13h10"/></svg>APK laden</a>
+        <a class="btn" href="https://github.com/Sens4r/repavio" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          Quellcode</a>
+      </div>
+      <div class="meta intro" style="--d:5"><span><i></i>Android 8+</span><span><i></i>kostenlos</span><span><i></i>ohne Konto</span><span><i></i>Open Source</span></div>
+
+      <div class="phones intro" style="--d:6">
+        <!-- Analyse -->
+        <div class="phone" role="img" aria-label="Analyse-Bildschirm mit Trainingsfortschritt und Muskelgruppen"><div class="float" style="height:100%"><div class="screen">
+          <div class="sb"><span>9:41</span><span class="cam"></span><span>87 %</span></div>
+          <div class="sc">
+            <div class="pill">Hypertrophie <span>· Aktuelle Phase</span></div>
+            <div class="stats"><div>Einheiten <b>11</b></div><div>Volumen <b>18,4 t</b></div></div>
+            <div class="card-s"><div class="k">TRAININGSFORTSCHRITT</div><div class="big">+6,4 %</div>
+              <svg viewBox="0 0 220 78" fill="none" aria-hidden="true"><line x1="0" y1="62" x2="220" y2="62" stroke="#A9ADB6" stroke-opacity=".35" stroke-dasharray="3 4"/><path d="M6 62 L27 58 L48 55 L69 57 L90 49 L111 45 L132 46 L153 38 L174 33 L195 29 L214 22 L214 78 L6 78Z" fill="#A8C7FA" fill-opacity=".14"/><polyline points="6,62 27,58 48,55 69,57 90,49 111,45 132,46 153,38 174,33 195,29 214,22" stroke="#A8C7FA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="214" cy="22" r="4.5" fill="#A8C7FA"/></svg></div>
+            <div class="h3s">Muskelgruppen</div>
+            <div class="tiles"><div>Beine<small>2 Übungen</small></div><div>Brust<small>3 Übungen</small></div><div>Rücken<small>2 Übungen</small></div><div>Schulter<small>1 Übung</small></div></div>
+          </div>
+          <div class="tabs"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg></i><i class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></i><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v4H17"/></svg></i><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></i></div>
+        </div></div></div>
+        <!-- Training -->
+        <div class="phone" role="img" aria-label="Trainings-Bildschirm mit Phase, Wochentagen und Übungskarten"><div class="float" style="height:100%"><div class="screen">
+          <div class="sb"><span>9:41</span><span class="cam"></span><span>87 %</span></div>
+          <div class="sc">
+            <div class="phase"><div class="row"><div class="t">Hypertrophie</div><div><div class="k">WOCHE</div><div class="w">3<small> / 8</small></div></div></div><div class="bar"><i></i></div><div class="s">11 von 32 Trainingseinheiten</div></div>
+            <div class="days"><span class="on">Mo</span><span>Di</span><span class="a">Mi</span><span>Do</span><span class="a">Fr</span><span class="a">Sa</span><span>So</span></div>
+            <div class="dayh"><div><b>Montag</b><div class="chips"><span>Brust</span><span>Schulter</span></div></div><small>3 Übungen</small></div>
+            <div class="ex"><div class="top"><span class="n">1</span><span class="nm">Bankdrücken<small>3 Sätze · 120 s Pause</small></span></div><div class="vals"><div>72,5 <small>kg</small></div><div>10 <small>Wdh.</small></div></div></div>
+            <div class="ex"><div class="top"><span class="n">2</span><span class="nm">Schulterdrücken<small>3 Sätze · 90 s Pause</small></span></div><div class="vals"><div>22 <small>kg</small></div><div>12 <small>Wdh.</small></div></div></div>
+            <div class="fin">Training beenden</div>
+          </div>
+          <div class="tabs"><i class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg></i><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></i><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v4H17"/></svg></i><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></i></div>
+        </div></div></div>
+        <!-- Ernährung -->
+        <div class="phone" role="img" aria-label="Ernährungs-Bildschirm mit Tagesbedarf und Makronährstoffen"><div class="float" style="height:100%"><div class="screen">
+          <div class="sb"><span>9:41</span><span class="cam"></span><span>87 %</span></div>
+          <div class="sc">
+            <div class="seg"><span class="on">Aufbau</span><span>Halten</span><span>Definition</span></div>
+            <div class="need"><div class="k">TAGESBEDARF</div><div class="v">3.056 <small>kcal</small></div><div style="font-size:10px;opacity:.85;margin-top:4px">Aufbau · Erhaltungsbedarf + 10 %</div>
+              <div class="split"><i style="width:21%;background:#A8C7FA"></i><i style="width:21%;background:rgba(214,227,255,.55)"></i><i style="flex:1;background:rgba(214,227,255,.25)"></i></div></div>
+            <div class="macros"><div>Protein<b>160 g</b>2,0 g/kg</div><div>Fett<b>72 g</b>0,9 g/kg</div><div>Kohlenh.<b>442 g</b>Rest</div></div>
+            <div class="rows"><div>Grundumsatz <b>1.793 kcal</b></div><div>Aktivität · mittel <b>× 1,55</b></div><div>Erhaltungsbedarf <b>2.778 kcal</b></div></div>
+          </div>
+          <div class="tabs"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg></i><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></i><i class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v4H17"/></svg></i><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></i></div>
+        </div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Funktionen -->
+  <section id="funktionen">
+    <div class="wrap">
+      <div class="sec-head rv">
+        <div class="kicker">// Funktionen</div>
+        <h2>Alles, was im Gym zählt.<br>Nichts, was stört.</h2>
+        <p>repavio funktioniert wie ein digitales Blatt Papier: Plan öffnen, Zahlen anpassen, Training mit einem Button speichern.</p>
+      </div>
+      <div class="grid3">
+        <div class="card rv spot"><div class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 3v14M6 7l4-4 4 4M6 13l4 4 4-4"/></svg></div><h3>Ein Wert pro Übung</h3><p>Gewicht und Wiederholungen gelten für alle Sätze. Gedrückt halten und wischen – oder antippen und tippen.</p></div>
+        <div class="card rv spot"><div class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="4" width="14" height="13" rx="2.5"/><path d="M3 8h14M7 2.5v3M13 2.5v3"/></svg></div><h3>ILB-Phasen oder frei</h3><p>Muskelausdauer, Hypertrophie, Muskelkraft – oder „Keine Phase“ für Training ohne ILB. Gezählt werden nur echte Einheiten.</p></div>
+        <div class="card rv spot"><div class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 17h14M4 13l4-4 3 2.5 5-6"/></svg></div><h3>Analyse ohne Lücken</h3><p>Erst Muskelgruppe, dann Übung: Gewicht, Wiederholungen und Volumen pro Training. Pausen erzeugen keine Nullwerte.</p></div>
+        <div class="card rv spot"><div class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 2.5v6M4 2.5v4a2 2 0 0 0 4 0v-4M6 8.5v9M14 17.5v-15c-1.8 1-2.8 3-2.8 5.6V11H14"/></svg></div><h3>Ernährungsbedarf</h3><p>Kalorien, Protein, Fett und Kohlenhydrate aus deinem Profil – nach Mifflin-St Jeor, für Aufbau, Halten oder Definition.</p></div>
+        <div class="card rv spot"><div class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="7" r="3.2"/><path d="M3.5 17.5c1.2-3 3.6-4.5 6.5-4.5s5.3 1.5 6.5 4.5"/></svg></div><h3>Profil &amp; Gewichtsverlauf</h3><p>Foto oder Avatar, Körperdaten und Gewicht mit Verlauf. Das Alter berechnet repavio selbst aus dem Geburtsdatum.</p></div>
+        <div class="card rv spot"><div class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 7V3h4M17 7V3h-4M3 13v4h4M17 13v4h-4"/></svg></div><h3>Vollbild im Training</h3><p>Ein Tipp blendet alles aus außer den Übungen und „Training beenden“. Mehr braucht es zwischen zwei Sätzen nicht.</p></div>
+        <div class="card rv spot"><div class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 9a5 5 0 0 1 10 0c0 3 1.5 4 1.5 4h-13S5 12 5 9z"/><path d="M8.5 16a1.6 1.6 0 0 0 3 0"/></svg></div><h3>Material You</h3><p>Farben und App-Icon kommen aus deinem Hintergrundbild. repavio sieht auf jedem Handy ein bisschen anders aus – passend.</p></div>
+        <div class="card rv spot"><div class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 3v9M6.5 8.5L10 12l3.5-3.5M4 16h12"/></svg></div><h3>Updates aus der App</h3><p>repavio prüft GitHub auf neue Versionen, lädt sie über Androids Downloadmanager und prüft die SHA-256-Prüfsumme.</p></div>
+        <div class="card rv spot"><div class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 6.5h12v10H4z"/><path d="M7 6.5V5a3 3 0 0 1 6 0v1.5M10 10v3"/></svg></div><h3>Backups</h3><p>Täglich automatisch, optional in einen eigenen Ordner, Export und Import als Datei. Das Profil nur verschlüsselt per Passwort.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ILB -->
+  <section id="ilb" style="padding-top:20px">
+    <div class="wrap">
+      <div class="sec-head rv">
+        <div class="kicker">// So funktioniert eine Phase</div>
+        <h2>Fortschritt in Einheiten,<br>nicht im Kalender.</h2>
+        <p>Krank? Urlaub? Die Phase wartet einfach. Kein „verpasst“, keine Nachträge – nur gespeicherte Trainings zählen.</p>
+      </div>
+      <div class="steps">
+        <div class="step rv"><div class="no">01</div><h3>Phase wählen</h3><p>Typ, Dauer in Wochen und deine Trainingstage. Oder „Keine Phase“ ohne Ziel.</p></div>
+        <div class="step rv"><div class="no">02</div><h3>Tage planen</h3><p>Muskelgruppen und Übungen pro Wochentag. Gleichnamige Übungen teilen ihren Verlauf.</p></div>
+        <div class="step rv"><div class="no">03</div><h3>Trainieren</h3><p>Werte anpassen, Ersatzübung wählen, wenn ein Gerät belegt ist. Dann „Training beenden“.</p></div>
+        <div class="step rv"><div class="no">04</div><h3>Abschließen</h3><p>Ziel erreicht? Phase abschließen, Zusammenfassung ansehen, nächste Phase starten.</p></div>
+      </div>
+      <div class="formula rv"><span>Ziel</span><b>=</b><b>Wochen</b><span>×</span><b>aktive Trainingstage</b><span style="margin-left:auto">z. B. 6 × 3 = 18 Einheiten</span></div>
+    </div>
+  </section>
+
+  <!-- Datenhoheit -->
+  <section id="datenhoheit" style="padding-top:20px">
+    <div class="wrap">
+      <div class="panel rv spot">
+        <div>
+          <div class="kicker">// Datenhoheit</div>
+          <h2>Deine Daten.<br>Dein Handy.</h2>
+          <p class="lead2">repavio hat keinen Server, kein Konto und keine Werbung. Es gibt nichts, wohin deine Trainingsdaten gesendet werden könnten.</p>
+        </div>
+        <ul class="list">
+          <li><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="2" width="10" height="16" rx="2.5"/><path d="M9 15h2"/></svg><div><b>Lokal gespeichert</b><span>Pläne, Trainings und Backups liegen im privaten Speicher der App.</span></div></li>
+          <li><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="8.5" width="12" height="9" rx="2"/><path d="M7 8.5V6a3 3 0 0 1 6 0v2.5"/></svg><div><b>Profil verschlüsselt</b><span>AES-256-GCM mit einem Schlüssel aus dem Android-Keystore, der das Gerät nicht verlässt.</span></div></li>
+          <li><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 10h14M10 3c2 2.2 3 4.5 3 7s-1 4.8-3 7c-2-2.2-3-4.5-3-7s1-4.8 3-7z"/><circle cx="10" cy="10" r="7"/></svg><div><b>Internet nur für Updates</b><span>Die einzige Verbindung fragt öffentliche GitHub-Releases ab. Keine Trainingsdaten, kein Tracking.</span></div></li>
+          <li><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 6l-4 4 4 4M13 6l4 4-4 4"/></svg><div><b>Offener Quellcode</b><span>Jede Zeile ist auf GitHub einsehbar. Releases werden automatisch gebaut und signiert.</span></div></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Download -->
+  <section id="download">
+    <div class="wrap">
+      <div class="sec-head rv">
+        <div class="kicker">// Installation</div>
+        <h2>In zwei Minuten startklar.</h2>
+        <p>repavio gibt es bewusst nicht im Play Store, sondern direkt von GitHub – kostenlos und ohne Umweg.</p>
+      </div>
+      <div class="install">
+        <ol class="ol">
+          <li class="rv"><div><b>APK laden</b><span>Auf dem Handy die neueste Version von GitHub herunterladen.</span></div></li>
+          <li class="rv"><div><b>Installation erlauben</b><span>Android fragt beim ersten Mal, ob Browser oder Dateien-App Apps installieren dürfen. Einmal bestätigen.</span></div></li>
+          <li class="rv"><div><b>Öffnen und loslegen</b><span>Eine kurze Einführung erklärt die ILB-Methode. Danach Phase wählen und Tage planen.</span></div></li>
+          <li class="rv"><div><b>Updates aus der App</b><span>Neue Versionen meldet repavio selbst. Deine Daten bleiben beim Update erhalten.</span></div></li>
+        </ol>
+        <div class="dl rv spot">
+          <div class="ver" id="dlVer">Neueste Version</div>
+          <h3>repavio für Android</h3>
+          <dl>
+            <dt>Voraussetzung</dt><dd>Android 8 oder neuer</dd>
+            <dt>Größe</dt><dd id="dlSize">ca. 13 MB</dd>
+            <dt>Preis</dt><dd>kostenlos</dd>
+            <dt>Berechtigungen</dt><dd>Internet (nur Updatecheck)</dd>
+          </dl>
+          <a class="btn primary" id="dlBtn" href="https://github.com/Sens4r/repavio/releases/latest" target="_blank" rel="noopener">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M3 13h10"/></svg>APK herunterladen</a>
+          <a class="btn" href="https://github.com/Sens4r/repavio/releases" target="_blank" rel="noopener">Alle Versionen</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Versionen -->
+  <section id="versionen" style="padding-top:20px">
+    <div class="wrap">
+      <div class="sec-head rv">
+        <div class="kicker">// Versionen</div>
+        <h2>Was zuletzt dazukam.</h2>
+        <p>Direkt aus den GitHub-Releases geladen.</p>
+      </div>
+      <div class="log" id="log"></div>
+      <div class="log-foot"><span id="logStatus">lädt …</span><a href="https://github.com/Sens4r/repavio/releases" target="_blank" rel="noopener">Alle Releases auf GitHub →</a></div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq" style="padding-top:20px">
+    <div class="wrap">
+      <div class="sec-head center rv">
+        <div class="kicker">// FAQ</div>
+        <h2>Häufige Fragen</h2>
+      </div>
+      <div class="faq">
+        <details class="rv"><summary>Was kostet repavio?</summary><p>Nichts. Keine Werbung, keine Abos, keine In-App-Käufe.</p></details>
+        <details class="rv"><summary>Warum nicht im Play Store?</summary><p>repavio ist ein privates Projekt und wird bewusst über GitHub verteilt – kostenlos und mit öffentlichem Quellcode. Updates kommen trotzdem bequem aus der App.</p></details>
+        <details class="rv"><summary>Gehen meine Daten bei einem Update verloren?</summary><p>Nein. Alle Releases sind mit demselben Schlüssel signiert, Android aktualisiert die bestehende App. Vor größeren Updates schadet ein exportiertes Backup trotzdem nie.</p></details>
+        <details class="rv"><summary>Wie ziehe ich auf ein neues Handy um?</summary><p>Unter Profil → Backup eine Sicherungsdatei exportieren und auf dem neuen Handy importieren. Das Profil ist nur enthalten, wenn du vorher ein Backup-Passwort festgelegt hast.</p></details>
+        <details class="rv"><summary>Was ist die ILB-Methode?</summary><p>Ein Trainingsprinzip mit aufeinanderfolgenden Phasen wie Muskelausdauer, Hypertrophie und Muskelkraft. repavio zählt dafür abgeschlossene Einheiten statt Kalenderwochen. Wer ohne ILB trainiert, wählt „Keine Phase“.</p></details>
+        <details class="rv"><summary>Wie genau ist der Kalorienbedarf?</summary><p>Er wird nach der Mifflin-St-Jeor-Formel mit Aktivitätsfaktor geschätzt. Das ist ein Richtwert und ersetzt keine ärztliche oder ernährungsfachliche Beratung.</p></details>
+        <details class="rv"><summary>Warum wird beim Installieren nachgefragt?</summary><p>Android fragt bei Apps außerhalb des Play Store, ob Browser oder Dateien-App installieren dürfen. repavio selbst fordert keine Berechtigung zum Installieren von Apps an – die Installation bestätigst immer du.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding:0">
+    <div class="wrap">
+      <div class="final rv spot">
+        <h2>Bereit fürs nächste Training?</h2>
+        <p>Laden, Phase wählen, loslegen. Ohne Konto, ohne Ablenkung.</p>
+        <div class="cta"><a class="btn primary" href="https://github.com/Sens4r/repavio/releases/latest" target="_blank" rel="noopener">APK laden</a><a class="btn" href="https://github.com/Sens4r/repavio" target="_blank" rel="noopener">Auf GitHub ansehen</a></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span class="by"><img src="assets/sensa-mark-32.png" alt="" width="18" height="18">repavio ist ein Projekt von <a href="https://sens4r.github.io/" style="color:var(--text)">Sensa</a></span>
+    <nav aria-label="Footer">
+      <a href="#funktionen">Funktionen</a>
+      <a href="#download">Download</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/Sens4r/repavio" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <small>© <span id="yr">2026</span> Sensa</small>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const day = iso => new Date(iso).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+
+  // ---------- Releases (öffentliche GitHub-API, ohne Token) ----------
+  const FALLBACK = [{ tag_name:'v1.4.3', published_at:'', body:'', html_url:'https://github.com/Sens4r/repavio/releases/latest' }];
+  function bullets(body) {
+    const lines = String(body || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const items = lines.filter(l => /^[-*] /.test(l)).map(l => l.slice(2)).slice(0, 6);
+    if (items.length) return `<ul>${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`;
+    return lines.length ? `<p>${esc(lines.slice(0, 2).join(' '))}</p>` : '<p>Details auf GitHub.</p>';
+  }
+  function renderLog(list, live) {
+    const stable = list.filter(r => !r.draft && !r.prerelease).slice(0, 4);
+    $('#log').innerHTML = stable.map((r, n) => `
+      <a class="rel" href="${esc(r.html_url)}" target="_blank" rel="noopener">
+        <div class="tag">${esc(r.tag_name)}${r.published_at ? `<small>${esc(day(r.published_at))}</small>` : ''}${n === 0 ? '<em>aktuell</em>' : ''}</div>
+        <div>${bullets(r.body)}</div>
+      </a>`).join('');
+    $('#logStatus').textContent = live ? 'live von GitHub' : 'GitHub gerade nicht erreichbar';
+    const latest = stable[0];
+    if (latest && live) {
+      const v = latest.tag_name.replace(/^v/, '');
+      $('#heroVer').textContent = 'repavio ' + v; $('#heroNote').textContent = '';
+      $('#dlVer').textContent = 'Version ' + v + (latest.published_at ? ' · ' + day(latest.published_at) : '');
+      const apk = (latest.assets || []).find(a => /\.apk$/.test(a.name));
+      if (apk) { $('#dlBtn').href = apk.browser_download_url; $('#dlSize').textContent = (apk.size / 1048576).toFixed(1).replace('.', ',') + ' MB'; }
+    }
+  }
+  renderLog(FALLBACK, false);
+  fetch('https://api.github.com/repos/Sens4r/repavio/releases?per_page=10', { headers: { Accept: 'application/vnd.github+json' } })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(list => renderLog(list, true))
+    .catch(() => {});
+
+  // ---------- UI ----------
+  $('#yr').textContent = new Date().getFullYear();
+  const nav = $('#nav');
+  addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 8), { passive: true });
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: .12 });
+  document.querySelectorAll('.rv').forEach(el => {
+    const sib = [...el.parentElement.children].filter(c => c.classList.contains('rv'));
+    if (sib.length > 1) el.style.setProperty('--i', sib.indexOf(el));
+    io.observe(el);
+  });
+  document.addEventListener('pointermove', e => {
+    const el = e.target.closest && e.target.closest('.spot'); if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    el.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  }, { passive: true });
+
+  // ---------- Animierter Hintergrund (wie sens4r.github.io) ----------
+  sky();
+  function sky() {
+    const cv = document.getElementById('sky'); if (!cv || !cv.getContext) return;
+    const ctx = cv.getContext('2d');
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const COLORS = [[159,216,238],[0,120,193],[45,76,159],[76,36,132],[149,133,192],[220,192,222]];
+    let W = 0, H = 0, dpr = 1, grid = null, beams = [], pulses = [], stars = [], running = false, last = 0, t = 0;
+    const mouse = { x: .5, y: .3, tx: .5, ty: .3 };
+    const G = 56;
+    function beamSprite(rgb, w, len) {
+      const pad = 80, c = document.createElement('canvas');
+      c.width = w + pad * 2; c.height = len + pad * 2;
+      const x = c.getContext('2d');
+      const g = x.createLinearGradient(0, pad, 0, pad + len);
+      const col = a => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`;
+      g.addColorStop(0, col(0)); g.addColorStop(.35, col(.9)); g.addColorStop(.6, col(.7)); g.addColorStop(1, col(0));
+      x.filter = 'blur(38px)'; x.fillStyle = g;
+      x.beginPath(); x.roundRect ? x.roundRect(pad, pad, w, len, w / 2) : x.rect(pad, pad, w, len); x.fill();
+      return c;
+    }
+    function build() {
+      dpr = Math.min(devicePixelRatio || 1, 1.5);
+      W = cv.clientWidth; H = cv.clientHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      const len = H * 1.2, scale = Math.min(1, W / 1200);
+      const spec = [
+        { c: 0, x: .22, a:  45, w: 120, o: .38, sp: .07, amp: 70 },
+        { c: 1, x: .38, a:  45, w: 150, o: .5,  sp: .05, amp: 90 },
+        { c: 2, x: .47, a:  45, w: 90,  o: .42, sp: .09, amp: 60 },
+        { c: 3, x: .55, a: -45, w: 170, o: .7,  sp: .06, amp: 80 },
+        { c: 4, x: .66, a: -45, w: 110, o: .42, sp: .08, amp: 70 },
+        { c: 5, x: .80, a: -45, w: 120, o: .3,  sp: .05, amp: 90 }
+      ];
+      beams = spec.map((b, i) => ({ ...b, img: beamSprite(COLORS[b.c], b.w * scale + 30, len), ph: i * 1.7 }));
+      grid = document.createElement('canvas'); grid.width = W * dpr; grid.height = H * dpr;
+      const g = grid.getContext('2d'); g.scale(dpr, dpr);
+      g.strokeStyle = 'rgba(255,255,255,.035)'; g.lineWidth = 1; g.beginPath();
+      for (let c = -H; c < W + H; c += G) { g.moveTo(c, 0); g.lineTo(c + H, H); g.moveTo(c, 0); g.lineTo(c - H, H); }
+      g.stroke();
+      g.fillStyle = 'rgba(255,255,255,.07)';
+      for (let y = 0; y <= H; y += G / 2) for (let x = ((y / (G / 2)) % 2 ? G / 2 : 0); x <= W; x += G) g.fillRect(x - .75, y - .75, 1.5, 1.5);
+      stars = Array.from({ length: Math.round(W * H / 11000) }, () => ({ x: Math.random() * W, y: Math.random() * H * .7, r: Math.random() * 1.1 + .2, ph: Math.random() * 6.28, sp: .6 + Math.random() * 1.4 }));
+      pulses = [];
+    }
+    function spawnPulse() {
+      const dir = Math.random() < .5 ? 1 : -1;
+      const k = Math.round((Math.random() * (W + H) - (dir > 0 ? H : 0)) / G);
+      const col = COLORS[[0, 0, 4, 5, 1][Math.floor(Math.random() * 5)]].join(',');
+      pulses.push({ x: k * G, y: 0, dir, v: 70 + Math.random() * 90, len: 60 + Math.random() * 90, col, life: 0 });
+    }
+    function frame(now) {
+      const dt = Math.min((now - (last || now)) / 1000, .05); last = now; t += dt;
+      mouse.x += (mouse.tx - mouse.x) * .04; mouse.y += (mouse.ty - mouse.y) * .04;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalAlpha = .75 + Math.sin(t * .5) * .25;
+      ctx.drawImage(grid, 0, 0, W, H);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'lighter';
+      const px = (mouse.x - .5) * 40, py = (mouse.y - .3) * 20;
+      for (const b of beams) {
+        const cx = b.x * W + Math.sin(t * b.sp * 6.28 + b.ph) * b.amp + px * (b.a > 0 ? 1 : -1);
+        const cy = H * .26 + Math.cos(t * b.sp * 4 + b.ph) * 20 + py;
+        const o = b.o * (.75 + .25 * Math.sin(t * b.sp * 9 + b.ph * 2));
+        ctx.save(); ctx.translate(cx, cy); ctx.rotate(b.a * Math.PI / 180);
+        ctx.globalAlpha = o; ctx.drawImage(b.img, -b.img.width / 2, -b.img.height / 2);
+        ctx.restore();
+      }
+      if (!reduce && Math.random() < dt * 2.2 && pulses.length < 14) spawnPulse();
+      for (const p of pulses) {
+        p.y += p.v * dt; p.x += p.v * dt * p.dir; p.life += dt;
+        const fade = Math.max(0, 1 - p.y / (H * .7)) * Math.min(1, p.life * 2);
+        const tx = p.x - p.dir * p.len * .7071, ty = p.y - p.len * .7071;
+        const g = ctx.createLinearGradient(tx, ty, p.x, p.y);
+        g.addColorStop(0, `rgba(${p.col},0)`); g.addColorStop(1, `rgba(${p.col},${.85 * fade})`);
+        ctx.strokeStyle = g; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(p.x, p.y); ctx.stroke();
+        ctx.fillStyle = `rgba(${p.col},${fade})`; ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, 6.28); ctx.fill();
+      }
+      pulses = pulses.filter(p => p.y < H * .75);
+      for (const s of stars) {
+        const a = .15 + .35 * (.5 + .5 * Math.sin(t * s.sp + s.ph));
+        ctx.fillStyle = `rgba(230,236,255,${a})`; ctx.fillRect(s.x, s.y, s.r, s.r);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      if (running) requestAnimationFrame(frame);
+    }
+    function start() { if (running || reduce) return; running = true; last = 0; requestAnimationFrame(frame); }
+    function stop() { running = false; }
+    build();
+    if (reduce) { frame(performance.now()); } else { start(); }
+    requestAnimationFrame(() => cv.classList.add('on'));
+    let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { build(); if (reduce) frame(performance.now()); }, 150); });
+    addEventListener('pointermove', e => { mouse.tx = e.clientX / innerWidth; mouse.ty = e.clientY / innerHeight; }, { passive: true });
+    new IntersectionObserver(([e]) => e.isIntersecting ? start() : stop()).observe(cv);
+    document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
+  }
+})();
+</script>
+</body>
+</html>
