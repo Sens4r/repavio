@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/repavio_logo_foreground"
+    android:tint="@android:color/system_accent1_100"
+    android:tintMode="src_in" />

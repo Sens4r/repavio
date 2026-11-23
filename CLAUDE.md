@@ -28,6 +28,14 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 - Datenhaltung: JSON in `SharedPreferences` (`LocalStore.kt`), Schema 6. Neue Felder optional und abwärtsverträglich lesen; Speichersystem nicht ohne Tests wechseln.
 - Logik in `Models.kt` mit Unit-Tests absichern (`app/src/test/.../ModelsTest.kt`); CI führt sie aus.
 
+- App-Icon: adaptiv. Ab Android 12 `mipmap-anydpi-v31` mit Systemfarben (`system_accent1_700` Hintergrund, Glyph in `system_accent1_100`); `monochrome`-Ebene für „Designsymbole“ (Android 13+). Davor schwarz auf weiß.
+
+## Website
+- `docs/index.html` → GitHub Pages aus `main`/`docs`, Adresse https://sens4r.github.io/repavio/. Eine Datei, kein Build, nur Google Fonts als Abhängigkeit.
+- Stil wie https://sens4r.github.io (Repo `Sens4r/sens4r.github.io`, raycast-inspiriert): Inter/JetBrains Mono, fast schwarz `#07060B`, Sensa-Logofarben, `prefers-reduced-motion` beachten. Hero-Hintergrund bewusst eigenes Motiv (Diagrammraster, atmende Balken, steigende Fortschrittslinien in App-Blau), nicht die Sensa-Lichtstrahlen.
+- Versionen und APK-Link werden live aus der GitHub-Releases-API geladen; Funktionstexte nur aus Code/Release-Notes ableiten, nichts erfinden. Bei neuen Funktionen Karten/FAQ mitpflegen.
+- Kein Impressum (privates, nicht geschäftliches Projekt, wie die Sensa-Seite).
+
 ## Release-Ablauf
 1. Arbeitsbranch von `main`, nur gewünschte Änderungen, keine unbeteiligten Umbauten.
 2. `versionName` und `versionCode` erhöhen; Release-Notizen in `release-notes/vX.Y.Z.md` (Deutsch, knapp). Fehlt die Datei, bricht der Release-Job ab.
@@ -47,5 +55,6 @@ Nur `Sens4r/repavio` verändern. Vor Updates, die Daten betreffen, ein externes 
 | 1.4.0 | 21.11.2026 | „Keine Phase“, Analyse-Drill-down mit Fortschrittsgrafik, Calisthenics-Übungen, weniger empfindliches Wischen; Update und Funktionen auf dem Pixel bestätigt |
 | 1.4.1 | 22.11.2026 | Neues UI im MCI-Stil (Vorschau vom Nutzer freigegeben), Vollbildmodus, Icon-Tab-Leiste, Balkendiagramm im Übungsdetail, Einstellungen als Kategorie-Kacheln, schlankes Update-Popup; Update und UI auf dem Pixel bestätigt (Text in Einstellungs-Kacheln war abgeschnitten → in 1.4.2 behoben) |
 | 1.4.2 | 22.11.2026 | Profil (verschlüsselt, Avatar/Foto, Gewichtsverlauf, Alter automatisch), Ernährungs-Tab, Backup-Passwort, Einstellungen als Liste im Profil; auf dem Pixel noch nicht bestätigt |
+| 1.4.3 | 23.11.2026 | App-Icon in Systemfarben + Designsymbol; Website unter `docs/`; auf dem Pixel noch nicht bestätigt |
 
 Offen: nichts Dringendes. Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.
