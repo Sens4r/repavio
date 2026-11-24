@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,6 +54,14 @@ class MainActivity : ComponentActivity() {
         @Suppress("DEPRECATION")
         window.navigationBarColor = android.graphics.Color.rgb(16, 17, 20)
         setContent { RepavioApp() }
+    }
+
+    override fun onResume() { super.onResume(); resumed.value = true }
+    override fun onPause() { resumed.value = false; super.onPause() }
+
+    companion object {
+        /** Stoppuhr piept nur, solange die App im Vordergrund ist. */
+        val resumed = mutableStateOf(false)
     }
 }
 
@@ -91,6 +100,29 @@ fun RepavioApp() {
     var resetRequested by remember { mutableStateOf(false) }
     var showingBrand by remember { mutableStateOf(true) }
     var trainingFocus by remember { mutableStateOf(false) }
+    val stopwatch = rememberSaveable(saver = StopwatchController.Saver) { StopwatchController() }
+    val beeper = remember(context) { StopwatchBeeper(context) }
+    DisposableEffect(beeper) { onDispose { beeper.release() } }
+    var stopwatchConfig by remember { mutableStateOf(beeper.load()) }
+    val view = LocalView.current
+    DisposableEffect(stopwatch.running) {
+        view.keepScreenOn = stopwatch.running
+        onDispose { view.keepScreenOn = false }
+    }
+    val appResumed by MainActivity.resumed
+    LaunchedEffect(stopwatch.running, appResumed) {
+        // Nur volle Minuten, die im Vordergrund erreicht werden; keine nachgeholten Pieptöne.
+        var lastMinute = (stopwatch.elapsed() / 60_000L).toInt()
+        while (stopwatch.running && appResumed) {
+            delay(250)
+            val minute = (stopwatch.elapsed() / 60_000L).toInt()
+            if (minute > lastMinute) {
+                val count = stopwatchBeeps(minute, stopwatchConfig)
+                if (count > 0) beeper.beep(count)
+                lastMinute = minute
+            }
+        }
+    }
     val profileStore = remember(context) { ProfileStore(context) }
     var profile by remember { mutableStateOf(profileStore.load()) }
     var photoBytes by remember { mutableStateOf(profileStore.loadPhoto()) }
@@ -197,7 +229,13 @@ fun RepavioApp() {
             ) {
                 when (tab) {
                     0 -> TrainingScreen(app, update, focus = trainingFocus,
-                        onFocusChange = { trainingFocus = it })
+                        onFocusChange = { trainingFocus = it },
+                        stopwatchTile = {
+                            StopwatchTile(stopwatch, stopwatchConfig) { next ->
+                                stopwatchConfig = next; beeper.save(next)
+                            }
+                        },
+                        onWorkoutSaved = { stopwatch.reset() })
                     1 -> AnalyzeScreen(app, update)
                     2 -> NutritionScreen(profile, onGoal = { updateProfile(profile.copy(goal = it)) },
                         onOpenProfile = { tab = 3 })
