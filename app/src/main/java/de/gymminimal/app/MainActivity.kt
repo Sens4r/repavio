@@ -125,6 +125,8 @@ fun RepavioApp() {
     }
     val profileStore = remember(context) { ProfileStore(context) }
     var profile by remember { mutableStateOf(profileStore.load()) }
+    var foodLog by remember { mutableStateOf(profileStore.loadFoodLog()) }
+    val updateFoodLog: (FoodLog) -> Unit = { next -> foodLog = next; profileStore.saveFoodLog(next) }
     var photoBytes by remember { mutableStateOf(profileStore.loadPhoto()) }
     val photo = remember(photoBytes) {
         profileStore.photoBitmap(photoBytes)?.asImageBitmap()
@@ -237,7 +239,7 @@ fun RepavioApp() {
                         },
                         onWorkoutSaved = { stopwatch.reset() })
                     1 -> AnalyzeScreen(app, update)
-                    2 -> NutritionScreen(profile, onGoal = { updateProfile(profile.copy(goal = it)) },
+                    2 -> NutritionScreen(profile, foodLog, updateFoodLog, onGoal = { updateProfile(profile.copy(goal = it)) },
                         onOpenProfile = { tab = 3 })
                     else -> SettingsScreen(backup, sounds,
                         onExport = { exportLauncher.launch("repavio_Backup.json") },
@@ -410,6 +412,7 @@ fun RepavioApp() {
                         if (ok) {
                             profile = profileStore.load()
                             photoBytes = profileStore.loadPhoto()
+                            foodLog = profileStore.loadFoodLog()
                             backupPasswordSet = true
                             pendingProfileBlob = null
                             tab = 3
@@ -427,13 +430,14 @@ fun RepavioApp() {
             AlertDialog(
                 onDismissRequest = { resetRequested = false },
                 title = { Text("repavio zurücksetzen?") },
-                text = { Text("Alle Trainingsdaten, Pläne, Phasen, Tags, Entwürfe, Profil, Gewichtsverlauf, Einstellungen und interne Backups werden dauerhaft entfernt. Bereits exportierte Dateien bleiben erhalten. Vorher ein Backup exportieren, falls du etwas behalten möchtest.") },
+                text = { Text("Alle Trainingsdaten, Pläne, Phasen, Tags, Entwürfe, Profil, Gewichtsverlauf, Ernährungstagebuch, Einstellungen und interne Backups werden dauerhaft entfernt. Bereits exportierte Dateien bleiben erhalten. Vorher ein Backup exportieren, falls du etwas behalten möchtest.") },
                 confirmButton = {
                     TextButton(onClick = {
                         store.clear()
                         backup.clearLocalBackups()
                         profileStore.clear()
                         profile = Profile()
+                        foodLog = FoodLog()
                         photoBytes = null
                         backupPasswordSet = false
                         app = initialData()

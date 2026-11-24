@@ -160,8 +160,8 @@ fun SettingsScreen(
                         Icons.Outlined.FolderOpen, onChooseFolder)
                 }
                 item {
-                    SettingRow("Backup-Passwort", if (backupPasswordSet) "Gesetzt · Profil wird verschlüsselt mitgesichert"
-                        else "Nicht gesetzt · Profil wird nicht mitgesichert", Icons.Outlined.Key) { passwordDialog = true }
+                    SettingRow("Backup-Passwort", if (backupPasswordSet) "Gesetzt · Profil und Ernährung verschlüsselt mitgesichert"
+                        else "Nicht gesetzt · Profil und Ernährung nicht mitgesichert", Icons.Outlined.Key) { passwordDialog = true }
                 }
                 item { SettingRow("Backup exportieren", "Sicherungsdatei speichern", Icons.Outlined.FileUpload, onExport) }
                 item { SettingRow("Backup importieren", "Eine Sicherungsdatei einlesen", Icons.Outlined.FileDownload, onImport) }

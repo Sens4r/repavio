@@ -360,8 +360,8 @@ fun BackupPasswordDialog(hasPassword: Boolean, busy: Boolean, onSet: (String) ->
         title = { Text(if (hasPassword) "Backup-Passwort ändern" else "Backup-Passwort", fontWeight = FontWeight.ExtraBold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Mit Passwort wird dein Profil verschlüsselt in Backups aufgenommen und lässt sich auch " +
-                    "auf einem neuen Handy wiederherstellen. Ohne das Passwort ist es nicht lesbar – auch nicht für dich.",
+                Text("Mit Passwort werden Profil und Ernährungstagebuch verschlüsselt in Backups aufgenommen und lassen sich auch " +
+                    "auf einem neuen Handy wiederherstellen. Ohne das Passwort sind sie nicht lesbar – auch nicht für dich.",
                     fontSize = 13.sp, color = SubtleText)
                 OutlinedTextField(first, { first = it }, label = { Text("Passwort (mind. 8 Zeichen)") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
@@ -394,7 +394,7 @@ fun RestoreProfileDialog(busy: Boolean, failed: Boolean, onRestore: (String) -> 
         title = { Text("Profil wiederherstellen?", fontWeight = FontWeight.ExtraBold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Die Trainingsdaten sind wiederhergestellt. Das Backup enthält zusätzlich ein verschlüsseltes Profil.",
+                Text("Die Trainingsdaten sind wiederhergestellt. Das Backup enthält zusätzlich verschlüsselte persönliche Daten (Profil, Ernährung).",
                     fontSize = 13.sp, color = SubtleText)
                 OutlinedTextField(password, { password = it }, label = { Text("Backup-Passwort") }, singleLine = true,
                     isError = failed, supportingText = if (failed) ({ Text("Passwort falsch oder Daten beschädigt.") }) else null,

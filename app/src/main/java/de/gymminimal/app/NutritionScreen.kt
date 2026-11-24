@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,14 +30,15 @@ private fun thousands(value: Int): String = String.format(Locale.GERMANY, "%,d",
 private fun factorText(value: Double): String = String.format(Locale.GERMANY, "%.3f", value).trimEnd('0').trimEnd(',')
 private fun perKg(value: Double): String = String.format(Locale.GERMANY, "%.1f g/kg", value)
 
-/** Daily need from the profile. Only a calculation: no food logging. */
+/** Tagesbedarf aus dem Profil (Unterseite des Ernährungstagebuchs). */
 @Composable
-fun NutritionScreen(profile: Profile, onGoal: (String) -> Unit, onOpenProfile: () -> Unit) {
+fun NeedScreen(profile: Profile, onGoal: (String) -> Unit, onOpenProfile: () -> Unit, onBack: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val result = nutritionFor(profile)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-        .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 24.dp),
+        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SubPageHeader("Bedarf", "Ziel für das Tagebuch", onBack)
 
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(CardBackground).padding(4.dp)
             .selectableGroup(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -115,6 +117,19 @@ fun NutritionScreen(profile: Profile, onGoal: (String) -> Unit, onOpenProfile: (
             }
         }
         Disclaimer()
+        }
+    }
+}
+
+@Composable
+fun SubPageHeader(title: String, subtitle: String, onBack: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.offset(x = (-8).dp)) {
+        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Zurück")
+        }
+        Column {
+            Text(title, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.3).sp)
+            if (subtitle.isNotBlank()) Text(subtitle, fontSize = 12.sp, color = SubtleText, maxLines = 1)
         }
     }
 }

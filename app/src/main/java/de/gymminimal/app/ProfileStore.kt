@@ -52,6 +52,17 @@ class ProfileStore(private val context: Context) {
         prefs.edit().putString("profile", deviceEncrypt(encode(profile).toString().toByteArray(Charsets.UTF_8))).apply()
     }
 
+    // ---------- Ernährungstagebuch (gleicher Schlüssel, gleiche Regeln wie das Profil) ----------
+
+    fun loadFoodLog(): FoodLog = try {
+        prefs.getString("food_log", null)?.let { decodeFoodLog(JSONObject(String(deviceDecrypt(it), Charsets.UTF_8))) }
+            ?: FoodLog()
+    } catch (_: Exception) { FoodLog() }
+
+    fun saveFoodLog(log: FoodLog) {
+        prefs.edit().putString("food_log", deviceEncrypt(encodeFoodLog(log).toString().toByteArray(Charsets.UTF_8))).apply()
+    }
+
     fun loadPhoto(): ByteArray? = try {
         if (photoFile.exists()) deviceDecrypt(photoFile.readText(Charsets.UTF_8)) else null
     } catch (_: Exception) { null }
@@ -97,7 +108,10 @@ class ProfileStore(private val context: Context) {
         val salt = prefs.getString("backup_salt", null)
         if (wrapped == null || salt == null) null else {
             val key = SecretKeySpec(deviceDecrypt(wrapped), "AES")
-            val payload = encode(load()).apply { loadPhoto()?.let { put("photo", b64(it)) } }
+            val payload = encode(load()).apply {
+                loadPhoto()?.let { put("photo", b64(it)) }
+                put("food", encodeFoodLog(loadFoodLog()))
+            }
             val cipher = Cipher.getInstance(AES_GCM).apply { init(Cipher.ENCRYPT_MODE, key) }
             val data = cipher.doFinal(payload.toString().toByteArray(Charsets.UTF_8))
             JSONObject().apply {
@@ -124,6 +138,8 @@ class ProfileStore(private val context: Context) {
         val photo = json.optString("photo").takeIf { it.isNotBlank() }?.let(::unb64)?.takeIf(::isSafePhoto)
         save(decode(json).copy(hasPhoto = photo != null))
         savePhoto(photo)
+        // Ältere Backups ohne Tagebuch lassen das vorhandene Tagebuch unverändert.
+        json.optJSONObject("food")?.let { saveFoodLog(decodeFoodLog(it)) }
         true
     } catch (_: Exception) { false }
 
@@ -233,6 +249,80 @@ class ProfileStore(private val context: Context) {
         )
     }
 
+    private fun nutrientsJson(n: Nutrients) = JSONArray().apply {
+        listOf(n.kcal, n.protein, n.fat, n.carbs, n.fiber, n.sugar, n.salt).forEach { put(Math.round(it * 100) / 100.0) }
+    }
+
+    private fun nutrientsFrom(a: JSONArray?): Nutrients? {
+        if (a == null || a.length() != 7) return null
+        val v = (0 until 7).map { a.optDouble(it, Double.NaN) }
+        return Nutrients(v[0], v[1], v[2], v[3], v[4], v[5], v[6]).takeIf { it.valid }
+    }
+
+    private fun encodeFoodLog(log: FoodLog) = JSONObject().apply {
+        put("v", 1)
+        put("entries", JSONArray().apply {
+            log.entries.forEach { e ->
+                put(JSONObject().apply {
+                    put("id", e.id); put("d", e.day); put("m", e.meal); put("n", e.name)
+                    e.amount?.let { put("a", it) }; put("ml", e.ml); put("v", nutrientsJson(e.values))
+                    e.foodId?.let { put("f", it) }
+                })
+            }
+        })
+        put("water", JSONObject().apply { log.water.forEach { (d, ml) -> put(d, ml) } })
+        put("foods", JSONArray().apply {
+            log.customFoods.forEach { f ->
+                put(JSONObject().apply {
+                    put("id", f.id); put("n", f.name); put("ml", f.ml); put("v", nutrientsJson(f.per100))
+                    put("p", JSONArray().apply {
+                        f.portions.forEach { p -> put(JSONObject().apply { put("l", p.label); put("g", p.grams) }) }
+                    })
+                })
+            }
+        })
+        put("fav", JSONArray(log.favorites.toList()))
+        put("recent", JSONArray(log.recent))
+    }
+
+    /** Auch für importierte Backups: unplausible Einträge werden verworfen, Längen begrenzt. */
+    private fun decodeFoodLog(j: JSONObject): FoodLog {
+        val dayPattern = Regex("\\d{4}-\\d{2}-\\d{2}")
+        val entries = j.optJSONArray("entries")?.let { arr ->
+            (0 until minOf(arr.length(), 200_000)).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val values = nutrientsFrom(o.optJSONArray("v")) ?: return@mapNotNull null
+                val day = o.optString("d").takeIf { it.matches(dayPattern) } ?: return@mapNotNull null
+                val meal = o.optInt("m", -1).takeIf { it in MEALS.indices } ?: return@mapNotNull null
+                val amount = if (o.has("a")) o.optDouble("a").takeIf { it.isFinite() && it > 0 && it <= MAX_AMOUNT }
+                    ?: return@mapNotNull null else null
+                DiaryEntry(o.optString("id").take(40).ifBlank { "e$i" }, day, meal, o.optString("n").take(60),
+                    amount, o.optBoolean("ml"), values, o.optString("f").take(80).ifBlank { null })
+            }
+        }.orEmpty()
+        val water = j.optJSONObject("water")?.let { w ->
+            w.keys().asSequence().filter { it.matches(dayPattern) }
+                .associateWith { w.optInt(it).coerceIn(0, 10_000) }.filterValues { it > 0 }
+        }.orEmpty()
+        val foods = j.optJSONArray("foods")?.let { arr ->
+            (0 until minOf(arr.length(), 5_000)).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val per100 = nutrientsFrom(o.optJSONArray("v")) ?: return@mapNotNull null
+                val portions = o.optJSONArray("p")?.let { p ->
+                    (0 until minOf(p.length(), 10)).mapNotNull { k ->
+                        p.optJSONObject(k)?.let { FoodPortion(it.optString("l").take(30), it.optDouble("g")) }
+                    }
+                }.orEmpty()
+                Food(o.optString("id").take(40), o.optString("n").take(60), per100, o.optBoolean("ml"),
+                    portions, custom = true).takeIf { it.id.startsWith("c:") && validCustomFood(it) }
+            }
+        }.orEmpty()
+        fun strings(name: String, max: Int) = j.optJSONArray(name)?.let { a ->
+            (0 until minOf(a.length(), max)).map { a.optString(it).take(80) }.filter { it.isNotBlank() }
+        }.orEmpty()
+        return FoodLog(entries, water, foods, strings("fav", 2_000).toSet(), strings("recent", MAX_RECENT))
+    }
+
     private fun b64(bytes: ByteArray) = Base64.encodeToString(bytes, Base64.NO_WRAP)
     private fun unb64(text: String) = Base64.decode(text, Base64.NO_WRAP)
 
@@ -244,7 +334,7 @@ class ProfileStore(private val context: Context) {
         private const val ITERATIONS = 600_000
         private const val MIN_IMPORT_ITERATIONS = 100_000
         private const val MAX_IMPORT_ITERATIONS = 2_000_000
-        private const val MAX_BLOB_CHARS = 4_000_000
+        private const val MAX_BLOB_CHARS = 16_000_000
         private const val MAX_PHOTO_BYTES = 1_500_000
         private const val MAX_PHOTO_SIDE = 1024
     }

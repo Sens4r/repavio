@@ -7,7 +7,8 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 - „So wenig Bedienung wie möglich, so viele Informationen wie nötig.“ Neue Funktionen nur nach Absprache.
 - Alle Daten lokal: kein Konto, keine Cloud, kein Backend, keine KI.
 - Profil (seit V1.4.2): Name, Geburtsdatum (Alter wird berechnet, nie gespeichert), Geschlecht m/w, Größe, Aktivität, Gewichtsverlauf (ein Eintrag pro Tag), Foto oder Avatar. **Verschlüsselt** mit Android-Keystore (AES-GCM) in `ProfileStore.kt`. In Backups nur, wenn ein Backup-Passwort gesetzt ist (PBKDF2-SHA256, Feld `profileEncrypted`); Trainingsdaten bleiben unverschlüsselt.
-- Ernährung: nur Bedarfsrechnung, kein Essens-Logging. Mifflin-St Jeor × Aktivität × Ziel (Aufbau +10 %, Halten, Definition −20 %); Protein 2,0 g/kg, Fett 0,9 g/kg, Rest Kohlenhydrate.
+- Ernährung (seit V1.4.6 Tagebuch): Bedarf nach Mifflin-St Jeor × Aktivität × Ziel (Aufbau +10 %, Halten, Definition −20 %); Protein 2,0 g/kg, Fett 0,9 g/kg, Rest Kohlenhydrate. Tagebuch mit 4 Mahlzeiten, Grundliste (`BaseFoods.kt`, gerundete Richtwerte je 100 g, KH ohne Ballaststoffe; IDs `b:…` stabil halten), eigene Lebensmittel (`c:…`), Verlauf, Favoriten, Schnelleingabe, Mahlzeit kopieren, Wasser (35 ml/kg), Ballaststoffe/Zucker/Salz. Einträge speichern absolute Werte (Schnappschuss). Gespeichert verschlüsselt in `ProfileStore` (`food_log`), im Backup nur im `profileEncrypted`-Block. Logik in `FoodLog.kt` mit `FoodLogTest.kt`. Kein Barcode-Scanner, keine Online-Datenbank.
+- Ernährung, später nach Absprache: Rezepte/Vorlagen (Stufe 2), adaptiver Bedarf aus Gewichtstrend (Stufe 3, Vorschau „Bedarf & Trend“ freigegeben).
 - Pro Übung **ein** Gewichts- und **ein** Wiederholungswert für alle Sätze; keine Satz-für-Satz-Erfassung.
 - Alternativübungen sind nur Ersatz, kein zusätzlicher Block.
 - Nur gespeicherte Trainings zählen. Keine Nullwerte oder Lücken für Pausen, kein „verpasst“, keine Kalenderlogik für Phasen.
@@ -66,6 +67,7 @@ Nur `Sens4r/repavio` verändern. Vor Updates, die Daten betreffen, ein externes 
 | 1.4.2 | 22.11.2026 | Profil (verschlüsselt, Avatar/Foto, Gewichtsverlauf, Alter automatisch), Ernährungs-Tab, Backup-Passwort, Einstellungen als Liste im Profil; auf dem Pixel bestätigt |
 | 1.4.3 | 23.11.2026 | App-Icon in Systemfarben + Designsymbol; Website unter `docs/`; auf dem Pixel bestätigt |
 | 1.4.4 | 24.11.2026 | Sicherheitsupdate (Update-Download in einem Durchgang, Import-Grenzen, PBKDF2 600k, kein Geräte-Umzug, Website ohne Google Fonts, Signier-Freigabe); Update und Signier-Freigabe bestätigt |
-| 1.4.5 | 24.11.2026 | Stoppuhr im Vollbild (Pieptöne einstellbar, Ducking, Bildschirm bleibt an, Reset bei „Training beenden“); auf dem Pixel noch nicht bestätigt |
+| 1.4.5 | 24.11.2026 | Stoppuhr im Vollbild (Pieptöne einstellbar, Ducking, Bildschirm bleibt an, Reset bei „Training beenden“); auf dem Pixel bestätigt |
+| 1.4.6 | 24.11.2026 | Ernährungstagebuch Stufe 1 (Grundliste, eigene Lebensmittel, Suche/Verlauf/Favoriten, Schnelleingabe, Kopieren, Wasser, Ballaststoffe/Zucker/Salz, verschlüsselt); auf dem Pixel noch nicht bestätigt |
 
-Offen: Ernährungs-Tracking Stufe 1 (Vorschau freigegeben; dann Regel „kein Essens-Logging“ anpassen). Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.
+Offen: Ernährung Stufe 2 (Rezepte) und 3 (adaptiver Bedarf). Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.
