@@ -281,6 +281,21 @@ class ProfileStore(private val context: Context) {
                 })
             }
         })
+        put("recipes", JSONArray().apply {
+            log.recipes.forEach { r ->
+                put(JSONObject().apply {
+                    put("id", r.id); put("n", r.name); put("p", r.portions)
+                    put("i", JSONArray().apply {
+                        r.ingredients.forEach { i ->
+                            put(JSONObject().apply {
+                                i.foodId?.let { put("f", it) }; put("n", i.name); put("a", i.amount); put("ml", i.ml)
+                                put("v", nutrientsJson(i.values))
+                            })
+                        }
+                    })
+                })
+            }
+        })
         put("fav", JSONArray(log.favorites.toList()))
         put("recent", JSONArray(log.recent))
     }
@@ -320,7 +335,22 @@ class ProfileStore(private val context: Context) {
         fun strings(name: String, max: Int) = j.optJSONArray(name)?.let { a ->
             (0 until minOf(a.length(), max)).map { a.optString(it).take(80) }.filter { it.isNotBlank() }
         }.orEmpty()
-        return FoodLog(entries, water, foods, strings("fav", 2_000).toSet(), strings("recent", MAX_RECENT))
+        val recipes = j.optJSONArray("recipes")?.let { arr ->
+            (0 until minOf(arr.length(), 2_000)).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val ingredients = o.optJSONArray("i")?.let { ia ->
+                    (0 until minOf(ia.length(), MAX_INGREDIENTS)).mapNotNull { k ->
+                        val io = ia.optJSONObject(k) ?: return@mapNotNull null
+                        val values = nutrientsFrom(io.optJSONArray("v")) ?: return@mapNotNull null
+                        Ingredient(io.optString("f").take(80).ifBlank { null }, io.optString("n").take(60),
+                            io.optDouble("a"), io.optBoolean("ml"), values)
+                    }
+                }.orEmpty()
+                Recipe(o.optString("id").take(40), o.optString("n").take(60), o.optInt("p", 1), ingredients)
+                    .takeIf { it.id.startsWith("r:") && validRecipe(it) }
+            }
+        }.orEmpty()
+        return FoodLog(entries, water, foods, strings("fav", 2_000).toSet(), strings("recent", MAX_RECENT), recipes)
     }
 
     private fun b64(bytes: ByteArray) = Base64.encodeToString(bytes, Base64.NO_WRAP)

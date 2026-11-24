@@ -41,7 +41,8 @@ import kotlin.math.abs
 fun TrainingScreen(
     app: AppData, update: ((AppData) -> AppData) -> Unit,
     focus: Boolean = false, onFocusChange: (Boolean) -> Unit = {},
-    stopwatchTile: (@Composable () -> Unit)? = null, onWorkoutSaved: () -> Unit = {}
+    stopwatchTile: (@Composable () -> Unit)? = null, onWorkoutSaved: () -> Unit = {},
+    bodyKg: Double? = null, workoutDuration: () -> Long? = { null }
 ) {
     var selectedDay by remember { mutableIntStateOf((java.time.LocalDate.now().dayOfWeek.value - 1).coerceIn(0, 6)) }
     var editingExercise by remember { mutableStateOf<Exercise?>(null) }
@@ -126,6 +127,7 @@ fun TrainingScreen(
                         exercise = exercise,
                         choice = app.choice(exercise.id),
                         data = app,
+                        bodyKg = bodyKg,
                         onEdit = { editingExercise = exercise; addingAlternative = false; exerciseEditorOpen = true },
                         onAddAlternative = {
                             editingExercise = exercise
@@ -285,7 +287,7 @@ fun TrainingScreen(
                 if (app.phase.openEnded) "" else " Der Phasenzähler steigt um eine Einheit.") },
             confirmButton = {
                 TextButton(onClick = {
-                    val result = finishWorkout(app, selectedDay, System.currentTimeMillis())
+                    val result = finishWorkout(app, selectedDay, System.currentTimeMillis(), bodyKg, workoutDuration())
                     if (result != null) {
                         update { result }
                         onWorkoutSaved()
@@ -449,7 +451,7 @@ private fun WeekStrip(selected: Int, plans: List<DayPlan>, onSelect: (Int) -> Un
 
 @Composable
 private fun ExerciseTile(
-    number: Int, exercise: Exercise, choice: ExerciseChoice, data: AppData,
+    number: Int, exercise: Exercise, choice: ExerciseChoice, data: AppData, bodyKg: Double?,
     onEdit: () -> Unit, onAddAlternative: () -> Unit,
     onChoice: (ExerciseChoice) -> Unit, onValues: (String, Values) -> Unit
 ) {
@@ -461,6 +463,10 @@ private fun ExerciseTile(
         else Values(exercise.weight, exercise.reps)
     val current = data.valueFor(selectedId, base)
     val unavailable = choice.status == "unavailable" || choice.status == "skipped"
+    val ek = if (replaced) alternative!!.isBodyweight else exercise.isBodyweight
+    val performedId = if (replaced) alternative!!.exerciseKey.ifBlank { alternative.id }
+        else exercise.exerciseKey.ifBlank { exercise.id }
+    val prediction = remember(data.history, performedId, ek) { predictionFor(data, performedId, ek) }
 
     val scheme = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
@@ -500,11 +506,27 @@ private fun ExerciseTile(
             Spacer(Modifier.height(12.dp))
             Row(Modifier.padding(end = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                SwipeNumberField(current.weight, "kg", Modifier.weight(1f), false) { value ->
-                    onValues(selectedId, current.copy(weight = value))
+                if (ek) {
+                    BodyLoadField(current.weight, data.bands, Modifier.weight(1f)) { value ->
+                        onValues(selectedId, current.copy(weight = value))
+                    }
+                } else {
+                    SwipeNumberField(current.weight, "kg", Modifier.weight(1f), false) { value ->
+                        onValues(selectedId, current.copy(weight = value))
+                    }
                 }
                 SwipeNumberField(current.reps, "Wdh.", Modifier.weight(1f), true) { value ->
                     onValues(selectedId, current.copy(reps = value))
+                }
+            }
+            if (ek && (bodyKg == null || bodyKg <= 0)) {
+                Text("Für EK in der Analyse: Gewicht im Profil eintragen.", fontSize = 11.sp, color = SubtleText,
+                    modifier = Modifier.padding(start = 4.dp, top = 6.dp))
+            }
+            prediction?.let { p ->
+                PredictionRow(p, ek) {
+                    onValues(selectedId, if (ek) current.copy(reps = p.reps.toString())
+                        else current.copy(weight = kgText(p.weight).replace(',', '.'), reps = p.reps.toString()))
                 }
             }
         }
@@ -547,6 +569,108 @@ private fun ExerciseTile(
             dismissButton = { TextButton(onClick = { showAlternatives = false }) { Text("Schließen") } }
         )
     }
+}
+
+/** Prognose für die nächste Einheit: Pfeil und Zahl. Antippen übernimmt die Werte. */
+@Composable
+private fun PredictionRow(p: Prediction, ek: Boolean, onApply: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val (icon, tint, word) = when (p.trend) {
+        1 -> Triple(Icons.Outlined.NorthEast, scheme.primary, "steigend")
+        -1 -> Triple(Icons.Outlined.SouthEast, scheme.error, "fallend")
+        else -> Triple(Icons.Outlined.East, SubtleText, "gleich")
+    }
+    val text = if (ek) "${p.reps} Wdh." else "${kgText(p.weight)} kg × ${p.reps}"
+    Row(Modifier.padding(top = 8.dp, end = 6.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))
+        .clickable(onClickLabel = "Prognose übernehmen", onClick = onApply)
+        .padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, "Trend $word", tint = tint, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text("Nächstes Mal: ", fontSize = 12.sp, color = SubtleText)
+        Text(text, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = tint)
+        Spacer(Modifier.weight(1f))
+        Text("übernehmen", fontSize = 11.sp, color = SubtleText)
+    }
+}
+
+/** EK-Last: zeigt "EK", "EK +10 kg" oder das Band. Antippen öffnet die Auswahl. */
+@Composable
+private fun BodyLoadField(value: String, bands: List<Band>, modifier: Modifier, onChange: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val load = parseBodyLoad(value) ?: BodyLoad()
+    val band = bands.firstOrNull { it.id == load.bandId }
+    Row(modifier.height(52.dp).clip(RoundedCornerShape(16.dp)).background(FieldBackground)
+        .clickable(onClickLabel = "Eigengewicht, Zusatz oder Band wählen") { open = true }.padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+        if (band != null) {
+            Box(Modifier.size(12.dp).clip(RoundedCornerShape(6.dp)).background(Color(bandArgb(band.color))))
+            Spacer(Modifier.width(6.dp))
+            Text("EK", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            Text(" −${kgText(band.kg)}", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        } else {
+            Text("EK", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+            if (load.extraKg > 0) Text(" +${kgText(load.extraKg)}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+        if (band != null || load.extraKg > 0) {
+            Spacer(Modifier.width(4.dp))
+            Text("kg", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = SubtleText,
+                modifier = Modifier.padding(top = 5.dp))
+        }
+    }
+    if (open) BodyLoadDialog(load, bands, onDismiss = { open = false }) { onChange(it); open = false }
+}
+
+@Composable
+private fun BodyLoadDialog(load: BodyLoad, bands: List<Band>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    var mode by remember { mutableStateOf(when { load.bandId.isNotBlank() -> "band"; load.extraKg > 0 -> "extra"; else -> "ek" }) }
+    var extra by remember { mutableStateOf(if (load.extraKg > 0) kgText(load.extraKg) else "") }
+    var bandId by remember { mutableStateOf(load.bandId.takeIf { id -> bands.any { it.id == id } } ?: bands.firstOrNull()?.id.orEmpty()) }
+    val extraValue = extra.toWeightOrNull()?.takeIf { it > 0 && it <= 300 }
+    val valid = when (mode) { "extra" -> extraValue != null; "band" -> bandId.isNotBlank(); else -> true }
+    AlertDialog(onDismissRequest = onDismiss, containerColor = CardBackground, shape = RoundedCornerShape(28.dp),
+        title = { Text("Belastung", fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("ek" to "Nur Eigengewicht", "extra" to "Zusatzgewicht (+)", "band" to "Band zur Unterstützung (−)")
+                    .forEach { (key, label) ->
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { mode = key }
+                            .padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = mode == key, onClick = { mode = key })
+                            Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                if (mode == "extra") {
+                    OutlinedTextField(extra, { extra = it.filter { c -> c.isDigit() || c == ',' || c == '.' }.take(6) },
+                        label = { Text("Zusatzgewicht (kg)") }, singleLine = true, isError = extraValue == null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth())
+                }
+                if (mode == "band") {
+                    if (bands.isEmpty()) Text("Noch keine Bänder angelegt. Profil → Bedienung → Widerstandsbänder.",
+                        fontSize = 12.sp, color = SubtleText)
+                    bands.forEach { b ->
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .background(if (bandId == b.id) scheme.primaryContainer else FieldBackground)
+                            .clickable { bandId = b.id }.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(16.dp).clip(RoundedCornerShape(8.dp)).background(Color(bandArgb(b.color))))
+                            Spacer(Modifier.width(10.dp))
+                            Text(b.color, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
+                                color = if (bandId == b.id) scheme.onPrimaryContainer else scheme.onSurface)
+                            Text("−${kgText(b.kg)} kg", color = if (bandId == b.id) scheme.onPrimaryContainer else SubtleText)
+                        }
+                    }
+                }
+                Text("In der Analyse zählt: Körpergewicht aus dem Profil + Zusatz − Band.", fontSize = 11.sp, color = SubtleText)
+            }
+        },
+        confirmButton = {
+            Button(enabled = valid, shape = RoundedCornerShape(24.dp), onClick = {
+                onPick(when (mode) { "extra" -> extra.replace(',', '.'); "band" -> bandLoad(bandId); else -> "0" })
+            }) { Text("Übernehmen", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } })
 }
 
 // Tap = numerical input. Long press + vertical drag = quick wheel-like changes.

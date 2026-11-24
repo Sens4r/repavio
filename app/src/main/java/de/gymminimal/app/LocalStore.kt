@@ -50,6 +50,11 @@ class LocalStore(private val context: Context) {
         return data
     }
 
+    private fun JSONObject.optBoolNull(key: String): Boolean? = if (has(key) && !isNull(key)) optBoolean(key) else null
+    private fun JSONObject.optFinite(key: String): Double = optDouble(key, 0.0).takeIf { it.isFinite() && it >= 0 } ?: 0.0
+    fun loadTabs(): TabConfig = decodeTabs(prefs.getString("tabs", null))
+    fun saveTabs(config: TabConfig) { prefs.edit().putString("tabs", encodeTabs(config)).apply() }
+
     private fun JSONObject.text(key: String, fallback: String = "") = optString(key, fallback)
     private fun <T> JSONArray.collectItems(fn: (JSONObject) -> T): List<T> =
         (0 until length()).map { fn(getJSONObject(it)) }
@@ -92,12 +97,14 @@ class LocalStore(private val context: Context) {
                         put("weight", ex.weight); put("reps", ex.reps)
                         put("sets", ex.sets); put("rest", ex.rest)
                         put("muscleGroup", ex.muscleGroup)
+                        ex.bodyweight?.let { put("bodyweight", it) }
                         put("alternatives", JSONArray().apply {
                             ex.alternatives.forEach { a -> put(JSONObject().apply {
                                 put("id", a.id); put("name", a.name)
                                 put("exerciseKey", a.exerciseKey)
                                 put("weight", a.weight); put("reps", a.reps)
                                 put("sets", a.sets); put("rest", a.rest)
+                                a.bodyweight?.let { put("bodyweight", it) }
                             }) }
                         })
                     }) }
@@ -108,15 +115,23 @@ class LocalStore(private val context: Context) {
             data.history.forEach { work -> put(JSONObject().apply {
                 put("id", work.id); put("phaseId", work.phaseId)
                 put("planDay", work.planDay); put("timestamp", work.timestamp)
+                work.durationMs?.let { put("durationMs", it) }
                 put("entries", JSONArray().apply {
                     work.entries.forEach { e -> put(JSONObject().apply {
                         put("originalId", e.originalId); put("performedId", e.performedId)
                         put("name", e.name); put("status", e.status)
                         put("weight", e.weight); put("reps", e.reps); put("sets", e.sets)
                         put("muscleGroup", e.muscleGroup)
+                        if (e.bodyweight) {
+                            put("bodyweight", true); put("bodyKg", e.bodyKg); put("extraKg", e.extraKg)
+                            put("bandKg", e.bandKg); put("bandName", e.bandName); put("bandId", e.bandId)
+                        }
                     }) }
                 })
             }) }
+        })
+        put("bands", JSONArray().apply {
+            data.bands.forEach { b -> put(JSONObject().apply { put("id", b.id); put("color", b.color); put("kg", b.kg) }) }
         })
         put("choices", JSONObject().apply {
             data.choices.forEach { (key, c) -> put(key, JSONObject().apply {
@@ -153,12 +168,13 @@ class LocalStore(private val context: Context) {
                         exerciseKey = ex.text("exerciseKey"),
                         weight = ex.text("weight", "0"), reps = ex.text("reps", "10"),
                         sets = ex.getInt("sets"), rest = ex.getInt("rest"),
+                        bodyweight = ex.optBoolNull("bodyweight"),
                         muscleGroup = normalizeMuscleGroup(ex.text("muscleGroup", inferredMuscleGroup(ex.getString("name"),
                             plan.text("muscles").split("·", ",").firstOrNull()?.trim().orEmpty()))),
                         alternatives = ex.getJSONArray("alternatives").collectItems { a ->
                             Alternative(a.getString("id"), a.getString("name"),
                                 a.text("weight", "0"), a.text("reps", "10"),
-                                a.getInt("sets"), a.getInt("rest"), a.text("exerciseKey"))
+                                a.getInt("sets"), a.getInt("rest"), a.text("exerciseKey"), a.optBoolNull("bodyweight"))
                         }
                     )
                 })
@@ -167,11 +183,15 @@ class LocalStore(private val context: Context) {
         val history = root.getJSONArray("history").collectItems { work ->
             Workout(id = work.getString("id"), phaseId = work.getString("phaseId"),
                 planDay = work.getInt("planDay"), timestamp = work.getLong("timestamp"),
+                durationMs = work.optLong("durationMs", -1L).takeIf { it > 0 },
                 entries = work.getJSONArray("entries").collectItems { e ->
                     LoggedExercise(e.getString("originalId"), e.getString("performedId"),
                         e.getString("name"), e.getString("status"),
                         e.getDouble("weight"), e.getInt("reps"), e.getInt("sets"),
-                        normalizeMuscleGroup(e.text("muscleGroup", inferredMuscleGroup(e.getString("name")))))
+                        normalizeMuscleGroup(e.text("muscleGroup", inferredMuscleGroup(e.getString("name")))),
+                        bodyweight = e.optBoolean("bodyweight", false),
+                        bodyKg = e.optFinite("bodyKg"), extraKg = e.optFinite("extraKg"), bandKg = e.optFinite("bandKg"),
+                        bandName = e.text("bandName").take(20), bandId = e.text("bandId").take(60))
                 })
         }
         val choicesJson = root.optJSONObject("choices") ?: JSONObject()
@@ -193,10 +213,16 @@ class LocalStore(private val context: Context) {
         val referenced = plans.flatMap { plan ->
             chosenMuscles(plan.muscles).toList() + plan.exercises.map { it.muscleGroup }
         }.filter { name -> name.isNotBlank() && name !in MUSCLE_GROUPS && name != "Sonstige" }
+        val bands = root.optJSONArray("bands")?.let { arr ->
+            (0 until minOf(arr.length(), 50)).mapNotNull { i ->
+                arr.optJSONObject(i)?.let { Band(it.optString("id").ifBlank { makeId() }, it.optString("color"), it.optDouble("kg")) }
+                    ?.takeIf(::validBand)
+            }
+        } ?: emptyList()
         val catalog = root.optJSONArray("exerciseCatalog")?.collectItems { definition ->
             ExerciseDefinition(definition.getString("id"), definition.getString("name"))
         } ?: emptyList()
         return migrateExerciseIdentities(AppData(phase, plans, history, choices, drafts, pastPhases,
-            alphabeticTags(customTags + referenced.filterNot { it in customTags }), catalog))
+            alphabeticTags(customTags + referenced.filterNot { it in customTags }), catalog, bands))
     }
 }

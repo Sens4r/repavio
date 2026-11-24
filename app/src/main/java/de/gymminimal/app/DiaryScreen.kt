@@ -53,7 +53,14 @@ private fun dayLabel(date: LocalDate, today: LocalDate): String = when (date) {
     else -> date.format(dayFormat)
 }
 
-private fun foodDetail(f: Food) = "${kcalText(f.per100.kcal)} kcal · ${g(f.per100.protein)} g Protein / 100 ${f.unit}"
+private fun foodDetail(f: Food): String {
+    val portion = f.portions.firstOrNull()
+    if (f.recipe && portion != null) {
+        val n = f.per100.scaled(portion.grams / 100.0)
+        return "1 Portion · ${kcalText(n.kcal)} kcal · ${g(n.protein)} g Protein"
+    }
+    return "${kcalText(f.per100.kcal)} kcal · ${g(f.per100.protein)} g Protein / 100 ${f.unit}"
+}
 
 /** Ernährung: Tagebuch mit Bedarf als Ziel. Alles lokal, verschlüsselt wie das Profil. */
 @Composable
@@ -267,6 +274,7 @@ private fun AddFoodScreen(log: FoodLog, day: String, meal: Int, onLog: (FoodLog)
     var quick by remember { mutableStateOf(false) }
     var customEditor by remember { mutableStateOf<Food?>(null) }
     var newCustom by remember { mutableStateOf(false) }
+    var recipeEditor by remember { mutableStateOf<Recipe?>(null) }
     val yesterday = dayKey(LocalDate.parse(day).minusDays(1))
     val yesterdayMeal = mealTotals(log, yesterday, meal)
     val hasYesterday = dayEntries(log, yesterday).any { it.meal == meal }
@@ -275,9 +283,19 @@ private fun AddFoodScreen(log: FoodLog, day: String, meal: Int, onLog: (FoodLog)
         1 -> recentFoods(log)
         2 -> favoriteFoods(log)
         3 -> log.customFoods.sortedBy { normalizeFood(it.name) }
+        4 -> log.recipes.mapNotNull(::recipeFood).sortedBy { normalizeFood(it.name) }
         else -> if (query.isBlank()) recentFoods(log).take(8) else searchFoods(log, query)
     }.let { list -> if (filter != 0 && query.isNotBlank()) list.filter { f ->
         searchKey(query).split(Regex("[\\s,]+")).filter(String::isNotBlank).all { searchKey(f.name).contains(it) } } else list }
+
+    recipeEditor?.let { recipe ->
+        BackHandler { recipeEditor = null }
+        RecipeEditor(recipe, log, isNew = log.recipes.none { it.id == recipe.id },
+            onClose = { recipeEditor = null },
+            onSave = { r -> onLog(upsertRecipe(log, r)); recipeEditor = null; filter = 4 },
+            onDelete = { id -> onLog(deleteRecipe(log, id)); recipeEditor = null })
+        return
+    }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -295,7 +313,7 @@ private fun AddFoodScreen(log: FoodLog, day: String, meal: Int, onLog: (FoodLog)
         }
         item {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("Alle", "Verlauf", "Favoriten", "Eigene").forEachIndexed { i, label ->
+                listOf("Alle", "Verlauf", "Favoriten", "Eigene", "Rezepte").forEachIndexed { i, label ->
                     FilterChip(selected = filter == i, onClick = { filter = i },
                         label = { Text(label, fontWeight = if (filter == i) FontWeight.ExtraBold else FontWeight.SemiBold) },
                         shape = RoundedCornerShape(17.dp), border = null,
@@ -311,12 +329,14 @@ private fun AddFoodScreen(log: FoodLog, day: String, meal: Int, onLog: (FoodLog)
                         query.isNotBlank() -> "Nichts gefunden. Lege es als eigenes Lebensmittel an."
                         filter == 2 -> "Noch keine Favoriten. Markiere ein Lebensmittel mit dem Stern."
                         filter == 3 -> "Noch keine eigenen Lebensmittel."
+                        filter == 4 -> "Noch keine Rezepte. Lege unten eines an."
                         else -> "Noch kein Verlauf. Suche oben nach einem Lebensmittel."
                     }, fontSize = 13.sp, color = SubtleText, modifier = Modifier.padding(16.dp))
                 }
                 results.forEachIndexed { i, f ->
                     if (i > 0) HorizontalDivider(color = FieldBackground)
                     FoodRow(f, tag = when {
+                        f.recipe -> "Rezept"
                         f.id in log.recent.take(10) -> "Zuletzt"
                         f.custom -> "Eigenes"
                         f.id in log.favorites -> "Favorit"
@@ -335,7 +355,12 @@ private fun AddFoodScreen(log: FoodLog, day: String, meal: Int, onLog: (FoodLog)
                         onLog(copyMeal(log, yesterday, day, meal) { newId("e") }); onClose()
                     }
                 }
-                ActionTile("Eigenes Lebensmittel", "Nährwerte vom Etikett", Modifier.fillMaxWidth()) { newCustom = true }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionTile("Eigenes Lebensmittel", "Nährwerte vom Etikett", Modifier.weight(1f)) { newCustom = true }
+                    ActionTile("Rezept anlegen", "aus mehreren Zutaten", Modifier.weight(1f)) {
+                        recipeEditor = Recipe(newId("r:"), "", 1, emptyList())
+                    }
+                }
             }
         }
     }
@@ -348,7 +373,11 @@ private fun AddFoodScreen(log: FoodLog, day: String, meal: Int, onLog: (FoodLog)
                 picked = null; onClose()
             },
             onFavorite = { onLog(toggleFavorite(log, food.id)) },
-            onEditCustom = if (food.custom) ({ picked = null; customEditor = food }) else null)
+            onEditCustom = when {
+                food.custom -> ({ picked = null; customEditor = food })
+                food.recipe -> log.recipes.firstOrNull { it.id == food.id }?.let { r -> { picked = null; recipeEditor = r } }
+                else -> null
+            })
     }
     if (quick) QuickEntryDialog(onDismiss = { quick = false }) { name, values ->
         quickEntry(name, values, meal, day, newId("e"))?.let { onLog(addEntry(log, it)) }
@@ -654,4 +683,136 @@ private fun CustomFoodDialog(existing: Food?, onDismiss: () -> Unit, onSave: (Fo
                 Text("Löschen", color = scheme.error) } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } })
     }
+}
+
+// ---------------------------------------------------------------- Rezept-Editor
+
+@Composable
+private fun RecipeEditor(
+    initial: Recipe, log: FoodLog, isNew: Boolean,
+    onClose: () -> Unit, onSave: (Recipe) -> Unit, onDelete: (String) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    var name by rememberSaveable { mutableStateOf(initial.name) }
+    var portions by rememberSaveable { mutableIntStateOf(initial.portions) }
+    var ingredients by remember { mutableStateOf(initial.ingredients) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var adding by remember { mutableStateOf<Food?>(null) }
+    var editIndex by remember { mutableIntStateOf(-1) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    val recipe = Recipe(initial.id, name, portions, ingredients)
+    val total = recipeTotal(recipe)
+    val perPortion = total.scaled(1.0 / portions)
+    val results = if (query.isBlank()) emptyList() else searchFoods(log, query, 8).filterNot { it.recipe }
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            SubPageHeader(if (isNew) "Neues Rezept" else "Rezept bearbeiten",
+                "${ingredients.size} Zutaten · ${kcalText(total.kcal)} kcal gesamt", onClose)
+        }
+        item {
+            OutlinedTextField(name, { name = it.take(60) }, label = { Text("Name") }, singleLine = true,
+                shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth())
+        }
+        item {
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardBackground)
+                .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Portionen", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("Je Portion: ${kcalText(perPortion.kcal)} kcal · ${g(perPortion.protein)} P · ${g(perPortion.fat)} F · " +
+                        "${g(perPortion.carbs)} KH", fontSize = 12.sp, color = SubtleText)
+                }
+                SmallRound("Weniger Portionen", Icons.Outlined.Remove) { portions = (portions - 1).coerceAtLeast(1) }
+                Text("$portions", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier.width(40.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                SmallRound("Mehr Portionen", Icons.Outlined.Add) { portions = (portions + 1).coerceAtMost(MAX_PORTIONS) }
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardBackground).padding(vertical = 4.dp)) {
+                if (ingredients.isEmpty()) Text("Noch keine Zutaten. Suche unten nach Lebensmitteln.",
+                    fontSize = 13.sp, color = SubtleText, modifier = Modifier.padding(16.dp))
+                ingredients.forEachIndexed { i, ing ->
+                    if (i > 0) HorizontalDivider(color = FieldBackground)
+                    Row(Modifier.fillMaxWidth().clickable { editIndex = i }
+                        .padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(buildAnnotatedString {
+                            append(ing.name)
+                            withStyle(SpanStyle(color = SubtleText)) { append(" · ${formatAmount(ing.amount)} ${if (ing.ml) "ml" else "g"}") }
+                        }, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Text(ing.values.kcal.roundToInt().toString(), fontSize = 13.sp, color = SubtleText)
+                        IconButton(onClick = { ingredients = ingredients.filterIndexed { k, _ -> k != i } }) {
+                            Icon(Icons.Outlined.Remove, "${ing.name} entfernen", tint = SubtleText, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            TextField(query, { query = it.take(40) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Zutat suchen") },
+                leadingIcon = { Icon(Icons.Outlined.Search, null, tint = SubtleText) },
+                shape = RoundedCornerShape(26.dp),
+                colors = TextFieldDefaults.colors(focusedContainerColor = FieldBackground,
+                    unfocusedContainerColor = FieldBackground, focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent))
+        }
+        if (results.isNotEmpty()) item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardBackground).padding(vertical = 4.dp)) {
+                results.forEachIndexed { i, f ->
+                    if (i > 0) HorizontalDivider(color = FieldBackground)
+                    FoodRow(f, tag = if (f.custom) "Eigenes" else null) { adding = f }
+                }
+            }
+        }
+        item {
+            Button(onClick = { onSave(recipe) }, enabled = validRecipe(recipe),
+                modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(28.dp)) {
+                Text("Rezept speichern", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            if (!isNew) TextButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Rezept löschen", color = scheme.error, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+
+    adding?.let { food ->
+        AmountDialog(food.name, food.portions.firstOrNull()?.grams ?: 100.0, if (food.ml) "ml" else "g",
+            onDismiss = { adding = null }) { amount ->
+            ingredientFor(food, amount)?.let { ingredients = ingredients + it }
+            adding = null; query = ""
+        }
+    }
+    ingredients.getOrNull(editIndex)?.let { ing ->
+        AmountDialog(ing.name, ing.amount, if (ing.ml) "ml" else "g", onDismiss = { editIndex = -1 }) { amount ->
+            ingredients = ingredients.mapIndexed { k, it ->
+                if (k == editIndex) it.copy(amount = amount, values = it.values.scaled(amount / it.amount)) else it
+            }
+            editIndex = -1
+        }
+    }
+    if (confirmDelete) {
+        AlertDialog(onDismissRequest = { confirmDelete = false }, containerColor = CardBackground,
+            title = { Text("Rezept löschen?") },
+            text = { Text("Bereits eingetragene Portionen behalten ihre Werte.") },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete(initial.id) }) {
+                Text("Löschen", color = scheme.error) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } })
+    }
+}
+
+@Composable
+private fun AmountDialog(title: String, initial: Double, unit: String, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
+    var text by remember { mutableStateOf(formatAmount(initial)) }
+    val value = parseNumber(text)?.takeIf { it > 0 && it <= MAX_AMOUNT }
+    AlertDialog(onDismissRequest = onDismiss, containerColor = CardBackground, shape = RoundedCornerShape(28.dp),
+        title = { Text(title, fontWeight = FontWeight.ExtraBold, maxLines = 2) },
+        text = { NumberField(text, { text = it }, "Menge ($unit)", Modifier.fillMaxWidth(), isError = value == null) },
+        confirmButton = {
+            Button(enabled = value != null, shape = RoundedCornerShape(24.dp), onClick = { onSave(value!!) }) {
+                Text("Übernehmen", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } })
 }

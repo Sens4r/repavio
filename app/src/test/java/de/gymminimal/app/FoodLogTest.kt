@@ -116,3 +116,33 @@ class FoodLogTest {
         assertEquals("200", formatAmount(200.0))
     }
 }
+
+class RecipeTest {
+    private val oats = BASE_FOODS.first { it.name == "Haferflocken" }
+    private val milk = BASE_FOODS.first { it.name == "Milch 1,5 %" }
+
+    @Test fun recipeBecomesFoodWithPortion() {
+        val r = Recipe("r:1", "Porridge", 2, listOf(ingredientFor(oats, 100.0)!!, ingredientFor(milk, 300.0)!!))
+        assertTrue(validRecipe(r))
+        val food = recipeFood(r)!!
+        assertTrue(food.recipe)
+        assertEquals(200.0, food.portions.single().grams, 0.001)
+        val entry = entryFor(food, 200.0, 0, "2026-11-24", "e")!!
+        assertEquals((372.0 + 141.0) / 2, entry.values.kcal, 0.01)
+    }
+
+    @Test fun recipesAreSearchableAndDeletable() {
+        val r = Recipe("r:1", "Porridge", 1, listOf(ingredientFor(oats, 80.0)!!))
+        var log = upsertRecipe(FoodLog(), r)
+        assertEquals("Porridge", searchFoods(log, "porr").first().name)
+        log = deleteRecipe(toggleFavorite(log, "r:1"), "r:1")
+        assertTrue(log.recipes.isEmpty() && log.favorites.isEmpty())
+    }
+
+    @Test fun invalidRecipes() {
+        assertFalse(validRecipe(Recipe("r:1", "", 1, listOf(ingredientFor(oats, 80.0)!!))))
+        assertFalse(validRecipe(Recipe("r:1", "X", 0, listOf(ingredientFor(oats, 80.0)!!))))
+        assertFalse(validRecipe(Recipe("r:1", "X", 1, emptyList())))
+        assertNull(ingredientFor(recipeFood(Recipe("r:1", "X", 1, listOf(ingredientFor(oats, 80.0)!!)))!!, 10.0))
+    }
+}

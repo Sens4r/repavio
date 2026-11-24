@@ -7,9 +7,13 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 - „So wenig Bedienung wie möglich, so viele Informationen wie nötig.“ Neue Funktionen nur nach Absprache.
 - Alle Daten lokal: kein Konto, keine Cloud, kein Backend, keine KI.
 - Profil (seit V1.4.2): Name, Geburtsdatum (Alter wird berechnet, nie gespeichert), Geschlecht m/w, Größe, Aktivität, Gewichtsverlauf (ein Eintrag pro Tag), Foto oder Avatar. **Verschlüsselt** mit Android-Keystore (AES-GCM) in `ProfileStore.kt`. In Backups nur, wenn ein Backup-Passwort gesetzt ist (PBKDF2-SHA256, Feld `profileEncrypted`); Trainingsdaten bleiben unverschlüsselt.
-- Ernährung (seit V1.4.6 Tagebuch): Bedarf nach Mifflin-St Jeor × Aktivität × Ziel (Aufbau +10 %, Halten, Definition −20 %); Protein 2,0 g/kg, Fett 0,9 g/kg, Rest Kohlenhydrate. Tagebuch mit 4 Mahlzeiten, Grundliste (`BaseFoods.kt`, gerundete Richtwerte je 100 g, KH ohne Ballaststoffe; IDs `b:…` stabil halten), eigene Lebensmittel (`c:…`), Verlauf, Favoriten, Schnelleingabe, Mahlzeit kopieren, Wasser (35 ml/kg), Ballaststoffe/Zucker/Salz. Einträge speichern absolute Werte (Schnappschuss). Gespeichert verschlüsselt in `ProfileStore` (`food_log`), im Backup nur im `profileEncrypted`-Block. Logik in `FoodLog.kt` mit `FoodLogTest.kt`. Kein Barcode-Scanner, keine Online-Datenbank.
-- Ernährung, später nach Absprache: Rezepte/Vorlagen (Stufe 2), adaptiver Bedarf aus Gewichtstrend (Stufe 3, Vorschau „Bedarf & Trend“ freigegeben).
+- Ernährung (seit V1.4.6 Tagebuch): Bedarf nach Mifflin-St Jeor × Aktivität × Ziel (Aufbau +10 %, Halten, Definition −20 %); Protein 2,0 g/kg, Fett 0,9 g/kg, Rest Kohlenhydrate. Tagebuch mit 4 Mahlzeiten, Grundliste (`BaseFoods.kt`, gerundete Richtwerte je 100 g, KH ohne Ballaststoffe; IDs `b:…` stabil halten), eigene Lebensmittel (`c:…`), Rezepte (`r:…`, Zutaten als Schnappschuss, Portion = Gesamtgewicht / Portionen), Verlauf, Favoriten, Schnelleingabe, Mahlzeit kopieren, Wasser (35 ml/kg), Ballaststoffe/Zucker/Salz. Einträge speichern absolute Werte (Schnappschuss). Gespeichert verschlüsselt in `ProfileStore` (`food_log`), im Backup nur im `profileEncrypted`-Block. Logik in `FoodLog.kt` mit `FoodLogTest.kt`. Kein Barcode-Scanner, keine Online-Datenbank.
+- Ernährung, später nach Absprache: adaptiver Bedarf aus Gewichtstrend (Stufe 3, Vorschau „Bedarf & Trend“ freigegeben).
 - Pro Übung **ein** Gewichts- und **ein** Wiederholungswert für alle Sätze; keine Satz-für-Satz-Erfassung.
+- Eigenkörpergewicht (seit V1.5.0, `Bodyweight.kt`): `bodyweight` an Übung/Alternative, `null` = automatisch für Calisthenics-Namen. Eingabewert `"0"` = nur EK, Zahl = Zusatzgewicht, `"band:<id>"` = Band. Gespeichert wird die effektive Last (Profilgewicht + Zusatz − Band, nie negativ) plus Aufschlüsselung. Bänder (Farbe, kg) in `AppData.bands`, verwaltet unter Profil → Bedienung.
+- Prognose (seit V1.5.0): Epley-1RM der letzten ≤ 6 Einheiten, linearer Trend ±5 %, ab 2 Einheiten; Gewichtserhöhung (2,5 kg, unter 20 kg 1 kg) ab 2 Wdh. über dem letzten Wert; bei EK nur Wiederholungen. Pfeil ↗/→/↘, Antippen übernimmt.
+- Trainingsdauer: Stoppuhrzeit wird beim Abschluss als `Workout.durationMs` gespeichert (1 min bis 12 h).
+- Tabs (seit V1.5.0): Reihenfolge und Ausblenden unter Profil → Bedienung, gespeichert in `LocalStore` (`tabs`, nicht im Backup). Profil nie ausblendbar.
 - Alternativübungen sind nur Ersatz, kein zusätzlicher Block.
 - Nur gespeicherte Trainings zählen. Keine Nullwerte oder Lücken für Pausen, kein „verpasst“, keine Kalenderlogik für Phasen.
 - ILB-Phase: Ziel = Wochen × aktive Tage; Abschluss nur manuell nach Erreichen des Ziels. Neue Phase leert die Übungskacheln, Tage und Muskelgruppen bleiben.
@@ -18,7 +22,7 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 - Gleichnamige Übungen teilen eine Identität (`exerciseKey`, normalisierter Name). Identitätslogik nicht ohne Rücksprache ändern.
 - Feste Muskelgruppen: Bauch, Beine, Bizeps, Brust, Rücken, Schulter. Nicht ohne Wunsch erweitern.
 - Sound: abschaltbarer Wisch-Sound und (seit V1.4.5) Stoppuhr-Pieptöne im Vollbild (kurz/doppelt, Abstände einstellbar, abschaltbar, Musik-Ducking, nur bei geöffneter App). Kein Klick- oder Abschlusssound.
-- Design: Minimal Dark, Material You. Keine Bildschirmtitel. Seit V1.4.1 (an die MCI-App angelehnt, aber ohne deren Branding): kräftige Typografie, große Rundungen (Karten 20–24 dp), neutrale Flächen, Akzente nur aus dem System (`primary`, `primaryContainer`), Tab-Leiste nur mit Icons (Training, Analyse, Ernährung, Profil; Einstellungen liegen im Profil), Vollbildmodus im Training (nur Übungen, Stoppuhr-Kachel + Button, nicht gespeichert, Zurück verlässt ihn).
+- Design: Minimal Dark, Material You. Keine Bildschirmtitel. Seit V1.4.1 (an die MCI-App angelehnt, aber ohne deren Branding): kräftige Typografie, große Rundungen (Karten 20–24 dp), neutrale Flächen, Akzente nur aus dem System (`primary`, `primaryContainer`), Tab-Leiste nur mit Icons (Training, Analyse, Ernährung, Profil; anordnen/ausblendbar; Einstellungen liegen im Profil), Vollbildmodus im Training (nur Übungen, Stoppuhr-Kachel + Button, nicht gespeichert, Zurück verlässt ihn).
 - Nicht umsetzen ohne ausdrücklichen Wunsch: KI- oder Fragebogen-Trainingsplaner, Pausentimer (die Stoppuhr seit V1.4.5 ist kein Pausentimer: kein Countdown, keine Satzlogik), Einzelsatz-Erfassung, Cloud, Konten, Social, Werbung.
 
 ## Technische Fixpunkte
@@ -68,6 +72,6 @@ Nur `Sens4r/repavio` verändern. Vor Updates, die Daten betreffen, ein externes 
 | 1.4.3 | 23.11.2026 | App-Icon in Systemfarben + Designsymbol; Website unter `docs/`; auf dem Pixel bestätigt |
 | 1.4.4 | 24.11.2026 | Sicherheitsupdate (Update-Download in einem Durchgang, Import-Grenzen, PBKDF2 600k, kein Geräte-Umzug, Website ohne Google Fonts, Signier-Freigabe); Update und Signier-Freigabe bestätigt |
 | 1.4.5 | 24.11.2026 | Stoppuhr im Vollbild (Pieptöne einstellbar, Ducking, Bildschirm bleibt an, Reset bei „Training beenden“); auf dem Pixel bestätigt |
-| 1.4.6 | 24.11.2026 | Ernährungstagebuch Stufe 1 (Grundliste, eigene Lebensmittel, Suche/Verlauf/Favoriten, Schnelleingabe, Kopieren, Wasser, Ballaststoffe/Zucker/Salz, verschlüsselt); auf dem Pixel noch nicht bestätigt |
+| 1.5.0 | 24.11.2026 | Ernährungstagebuch mit Rezepten (1.4.6 nie veröffentlicht, hier enthalten), Eigengewicht mit Zusatz/Bändern, Prognose, Trainingsdauer, Tabs anordnen/ausblenden; auf dem Pixel noch nicht bestätigt |
 
-Offen: Ernährung Stufe 2 (Rezepte) und 3 (adaptiver Bedarf). Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.
+Offen: Ernährung Stufe 3 (adaptiver Bedarf). Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.

@@ -21,7 +21,8 @@ data class FoodPortion(val label: String, val grams: Double)
 
 data class Food(
     val id: String, val name: String, val per100: Nutrients,
-    val ml: Boolean = false, val portions: List<FoodPortion> = emptyList(), val custom: Boolean = false
+    val ml: Boolean = false, val portions: List<FoodPortion> = emptyList(), val custom: Boolean = false,
+    val recipe: Boolean = false
 ) {
     val unit: String get() = if (ml) "ml" else "g"
 }
@@ -32,12 +33,18 @@ data class DiaryEntry(
     val amount: Double?, val ml: Boolean, val values: Nutrients, val foodId: String? = null
 )
 
+/** Zutat eines Rezepts: Schnappschuss der Werte zur gewählten Menge. */
+data class Ingredient(val foodId: String?, val name: String, val amount: Double, val ml: Boolean, val values: Nutrients)
+
+data class Recipe(val id: String, val name: String, val portions: Int, val ingredients: List<Ingredient>)
+
 data class FoodLog(
     val entries: List<DiaryEntry> = emptyList(),
     val water: Map<String, Int> = emptyMap(),
     val customFoods: List<Food> = emptyList(),
     val favorites: Set<String> = emptySet(),
-    val recent: List<String> = emptyList()
+    val recent: List<String> = emptyList(),
+    val recipes: List<Recipe> = emptyList()
 )
 
 val MEALS = listOf("Frühstück", "Mittagessen", "Abendessen", "Snacks")
@@ -122,7 +129,43 @@ fun deleteCustomFood(log: FoodLog, id: String): FoodLog = log.copy(
     favorites = log.favorites - id, recent = log.recent - id
 )
 
-fun allFoods(log: FoodLog): List<Food> = log.customFoods + BASE_FOODS
+fun allFoods(log: FoodLog): List<Food> = log.customFoods + log.recipes.mapNotNull(::recipeFood) + BASE_FOODS
+
+// ---------------------------------------------------------------- Rezepte
+
+const val MAX_PORTIONS = 50
+const val MAX_INGREDIENTS = 50
+
+fun recipeTotal(recipe: Recipe): Nutrients = recipe.ingredients.fold(Nutrients()) { acc, i -> acc + i.values }
+fun recipeWeight(recipe: Recipe): Double = recipe.ingredients.sumOf { it.amount }
+
+/** Ein Rezept wird wie ein Lebensmittel eingetragen: Werte je 100 g des Gesamtgewichts, Portion = Gesamt / Portionen. */
+fun recipeFood(recipe: Recipe): Food? {
+    val weight = recipeWeight(recipe)
+    if (weight <= 0 || recipe.portions !in 1..MAX_PORTIONS) return null
+    return Food(recipe.id, recipe.name, recipeTotal(recipe).scaled(100.0 / weight), false,
+        listOf(FoodPortion("1 Portion", weight / recipe.portions)), recipe = true)
+}
+
+fun ingredientFor(food: Food, amount: Double): Ingredient? {
+    if (food.recipe || !amount.isFinite() || amount <= 0 || amount > MAX_AMOUNT) return null
+    return Ingredient(food.id, food.name, amount, food.ml, food.per100.scaled(amount / 100.0))
+}
+
+fun validRecipe(recipe: Recipe): Boolean =
+    recipe.name.isNotBlank() && recipe.portions in 1..MAX_PORTIONS &&
+        recipe.ingredients.size in 1..MAX_INGREDIENTS &&
+        recipe.ingredients.all { it.amount > 0 && it.amount <= MAX_AMOUNT && it.values.valid }
+
+fun upsertRecipe(log: FoodLog, recipe: Recipe): FoodLog {
+    val r = recipe.copy(name = recipe.name.trim().take(60))
+    return log.copy(recipes = log.recipes.filterNot { it.id == r.id } + r)
+}
+
+/** Rezept löschen. Bereits eingetragene Portionen behalten ihre Werte. */
+fun deleteRecipe(log: FoodLog, id: String): FoodLog = log.copy(
+    recipes = log.recipes.filterNot { it.id == id }, favorites = log.favorites - id, recent = log.recent - id
+)
 
 fun normalizeFood(text: String): String {
     val lower = text.lowercase(Locale.GERMANY)
@@ -143,7 +186,7 @@ fun searchFoods(log: FoodLog, query: String, limit: Int = 40): List<Food> {
         .filter { (_, n) -> tokens.all { n.contains(it) } }
         .sortedWith(compareBy(
             { (f, _) -> log.recent.indexOf(f.id).let { if (it < 0) Int.MAX_VALUE else it } },
-            { (f, _) -> if (f.custom) 0 else 1 },
+            { (f, _) -> if (f.custom || f.recipe) 0 else 1 },
             { (_, n) -> if (n.startsWith(tokens.first())) 0 else 1 },
             { (_, n) -> n.length }))
         .map { it.first }.take(limit)

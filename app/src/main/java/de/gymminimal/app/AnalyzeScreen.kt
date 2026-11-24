@@ -158,8 +158,13 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(formatDate(p.whenLogged), color = SubtleText, fontSize = 13.sp,
                         modifier = Modifier.weight(1f))
-                    Text("${formatNumber(p.logged.weight)} kg × ${p.logged.reps} × ${p.logged.sets}",
-                        fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("${formatNumber(p.logged.weight)} kg × ${p.logged.reps} × ${p.logged.sets}",
+                            fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        if (p.logged.bodyweight) Text(loggedLoadLabel(p.logged) +
+                            if (p.logged.bodyKg > 0) " · Körper ${formatNumber(p.logged.bodyKg)} kg" else " · ohne Körpergewicht",
+                            fontSize = 11.sp, color = SubtleText, maxLines = 1)
+                    }
                     Spacer(Modifier.width(12.dp))
                     Icon(Icons.Outlined.Edit, "Trainingswerte korrigieren", modifier = Modifier.size(17.dp),
                         tint = SubtleText)
@@ -260,12 +265,20 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
                 }
             }
         }
-        item {
+        item { Column {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatisticCard("Einheiten", phaseWorkouts.size.toString(), Modifier.weight(1f))
                 StatisticCard("Volumen", "${formatNumber(totalVolume / 1000)} t", Modifier.weight(1f))
             }
-        }
+            val durations = phaseWorkouts.mapNotNull { it.durationMs }
+            if (durations.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatisticCard("Ø Dauer", durationText(durations.average().toLong()), Modifier.weight(1f))
+                    StatisticCard("Gestoppt", "${durations.size} von ${phaseWorkouts.size}", Modifier.weight(1f))
+                }
+            }
+        } }
         item { ProgressCard(progress) }
         if (muscles.isEmpty()) {
             item {
