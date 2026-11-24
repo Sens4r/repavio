@@ -34,7 +34,6 @@ fun StopwatchTile(stopwatch: StopwatchController, config: StopwatchConfig, onCon
         now = SystemClock.elapsedRealtime()
     }
     val elapsed = stopwatch.elapsed(now)
-    val state = when { stopwatch.running -> "Läuft"; elapsed > 0 -> "Pausiert"; else -> "Bereit" }
 
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(CardBackground)
         .padding(start = 18.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
@@ -45,7 +44,6 @@ fun StopwatchTile(stopwatch: StopwatchController, config: StopwatchConfig, onCon
                     letterSpacing = (-0.5).sp, lineHeight = 38.sp, maxLines = 1,
                     color = if (stopwatch.running) scheme.primary else scheme.onSurface,
                     style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
-                Text("$state · ${stopwatchSummary(config)}", fontSize = 12.sp, color = SubtleText, maxLines = 1)
             }
             if (!stopwatch.running && elapsed > 0) {
                 RoundIcon(Icons.Outlined.RestartAlt, "Stoppuhr zurücksetzen", FieldBackground, scheme.onSurface, 44) {

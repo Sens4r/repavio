@@ -33,8 +33,8 @@ fun SettingsScreen(
     sounds: RepavioSounds,
     tabConfig: TabConfig = TabConfig(),
     onTabConfig: (TabConfig) -> Unit = {},
-    bands: List<Band> = emptyList(),
-    onBands: (List<Band>) -> Unit = {},
+    newsEnabled: Boolean = true,
+    onNewsEnabled: (Boolean) -> Unit = {},
     onExport: () -> Unit,
     onImport: () -> Unit,
     onChooseFolder: () -> Unit,
@@ -99,7 +99,7 @@ fun SettingsScreen(
             Triple("backup", Icons.Outlined.Backup, "Backup" to "${backups.size} lokale Sicherungen" +
                 if (backupPasswordSet) " · Profil verschlüsselt" else ""),
             Triple("bedienung", Icons.Outlined.TouchApp, "Bedienung" to (if (soundEnabled) "Wisch-Sound an" else "Wisch-Sound aus") +
-                " · Tabs · ${bands.size} Bänder"),
+                " · Tabs"),
             Triple("app", Icons.Outlined.SystemUpdate, "App & Updates" to "Version $appVersion"),
             Triple("reset", Icons.Outlined.DeleteForever, "Zurücksetzen" to "Alle Daten auf dem Gerät löschen")
         )
@@ -202,7 +202,19 @@ fun SettingsScreen(
             }
             "bedienung" -> {
                 item { TabsCard(tabConfig, onTabConfig) }
-                item { BandsCard(bands, onBands) }
+                item {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                        .background(CardBackground).padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.NewReleases, null, modifier = Modifier.size(22.dp), tint = SubtleText)
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Neuigkeiten nach Updates", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text("Kurzes Pop-up bei neuen Funktionen", fontSize = 12.sp, color = SubtleText)
+                        }
+                        Switch(checked = newsEnabled, onCheckedChange = onNewsEnabled)
+                    }
+                }
                 item {
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
                     .background(CardBackground).padding(horizontal = 16.dp, vertical = 10.dp),
@@ -279,74 +291,5 @@ private fun TabsCard(config: TabConfig, onChange: (TabConfig) -> Unit) {
                     onCheckedChange = { onChange(toggleTab(config, tab)) })
             }
         }
-    }
-}
-
-/** Widerstandsbänder: Farbe und Unterstützung in kg, für EK-Übungen. */
-@Composable
-private fun BandsCard(bands: List<Band>, onChange: (List<Band>) -> Unit) {
-    var editing by remember { mutableStateOf<Band?>(null) }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(CardBackground)
-        .padding(start = 16.dp, end = 6.dp, top = 12.dp, bottom = 6.dp)) {
-        Text("Widerstandsbänder", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        Text("Für Eigengewicht-Übungen. Die Unterstützung wird in der Analyse vom Körpergewicht abgezogen.",
-            fontSize = 12.sp, color = SubtleText, modifier = Modifier.padding(end = 10.dp, bottom = 4.dp))
-        bands.sortedBy { it.kg }.forEach { band ->
-            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable { editing = band }
-                .padding(end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(18.dp).clip(RoundedCornerShape(9.dp)).background(Color(bandArgb(band.color))))
-                Spacer(Modifier.width(12.dp))
-                Text(band.color, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text("−${loadKg(band.kg)} kg", fontSize = 13.sp, color = SubtleText)
-            }
-        }
-        TextButton(onClick = { editing = Band(color = BAND_COLORS.first().first, kg = 0.0) }) {
-            Icon(Icons.Outlined.Add, null, modifier = Modifier.size(17.dp))
-            Spacer(Modifier.width(5.dp))
-            Text("Band hinzufügen")
-        }
-    }
-    editing?.let { band ->
-        val isNew = bands.none { it.id == band.id }
-        var color by remember(band.id) { mutableStateOf(band.color) }
-        var kg by remember(band.id) { mutableStateOf(if (band.kg > 0) loadKg(band.kg) else "") }
-        val value = kg.toWeightOrNull()
-        val candidate = band.copy(color = color, kg = value ?: 0.0)
-        AlertDialog(onDismissRequest = { editing = null }, containerColor = CardBackground, shape = RoundedCornerShape(28.dp),
-            title = { Text(if (isNew) "Band hinzufügen" else "Band bearbeiten", fontWeight = FontWeight.ExtraBold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Farbe", fontSize = 12.sp, color = SubtleText)
-                    BAND_COLORS.chunked(4).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            row.forEach { (name, argb) ->
-                                val active = color == name
-                                Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
-                                    .background(if (active) MaterialTheme.colorScheme.primaryContainer else FieldBackground)
-                                    .clickable { color = name }.padding(vertical = 8.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(Modifier.size(20.dp).clip(RoundedCornerShape(10.dp)).background(Color(argb)))
-                                    Text(name, fontSize = 11.sp, maxLines = 1)
-                                }
-                            }
-                        }
-                    }
-                    OutlinedTextField(kg, { kg = it.filter { c -> c.isDigit() || c == ',' || c == '.' }.take(5) },
-                        label = { Text("Unterstützung (kg)") }, singleLine = true, isError = !validBand(candidate),
-                        supportingText = { Text("Etwa so viel Last nimmt das Band ab (Herstellerangabe oder Schätzung).") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth())
-                    if (!isNew) TextButton(onClick = { onChange(bands.filterNot { it.id == band.id }); editing = null }) {
-                        Text("Band löschen", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(enabled = validBand(candidate), shape = RoundedCornerShape(24.dp), onClick = {
-                    onChange(if (isNew) bands + candidate else bands.map { if (it.id == band.id) candidate else it })
-                    editing = null
-                }) { Text("Speichern", fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = { TextButton(onClick = { editing = null }) { Text("Abbrechen") } })
     }
 }

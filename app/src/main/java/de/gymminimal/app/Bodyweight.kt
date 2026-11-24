@@ -25,7 +25,18 @@ fun bodyweightFor(name: String, setting: Boolean?): Boolean = setting ?: isCalis
 val Exercise.isBodyweight: Boolean get() = bodyweightFor(name, bodyweight)
 val Alternative.isBodyweight: Boolean get() = bodyweightFor(name, bodyweight)
 
-data class Band(val id: String = makeId(), val color: String, val kg: Double)
+/**
+ * Widerstandsband mit Spanne vom Etikett (z. B. 35–85 lb). Gerechnet wird mit der Mitte in kg,
+ * weil die Unterstützung mit der Dehnung schwankt; wichtig ist, dass dasselbe Band immer gleich zählt.
+ */
+data class Band(val id: String = makeId(), val color: String, val min: Double, val max: Double = min, val unit: String = "kg") {
+    val kg: Double get() = Math.round((toKg(min, unit) + toKg(max, unit)) / 2 * 10) / 10.0
+}
+
+const val LB_TO_KG = 0.4536
+fun toKg(value: Double, unit: String): Double = if (unit == "lb") value * LB_TO_KG else value
+fun bandRangeText(band: Band): String =
+    (if (band.min == band.max) loadKg(band.min) else "${loadKg(band.min)}–${loadKg(band.max)}") + " " + band.unit
 
 /** Bandfarben mit Anzeigefarbe (ARGB). */
 val BAND_COLORS: List<Pair<String, Long>> = listOf(
@@ -33,7 +44,9 @@ val BAND_COLORS: List<Pair<String, Long>> = listOf(
     "Blau" to 0xFF3E7BFA, "Lila" to 0xFF8E4EC6, "Schwarz" to 0xFF3A3A3F, "Grau" to 0xFF8B8D98
 )
 fun bandArgb(color: String): Long = BAND_COLORS.firstOrNull { it.first == color }?.second ?: 0xFF8B8D98
-fun validBand(band: Band): Boolean = band.color in BAND_COLORS.map { it.first } && band.kg.isFinite() && band.kg in 0.5..200.0
+fun validBand(band: Band): Boolean = band.color in BAND_COLORS.map { it.first } && band.unit in listOf("kg", "lb") &&
+    band.min.isFinite() && band.max.isFinite() && band.min >= 0 && band.max >= band.min && band.max <= 500 &&
+    band.kg in 0.5..200.0
 
 /**
  * Belastung einer EK-Übung im Eingabefeld:
