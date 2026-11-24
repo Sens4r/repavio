@@ -526,7 +526,7 @@ private fun ExerciseTile(
             prediction?.let { p ->
                 PredictionRow(p, ek) {
                     onValues(selectedId, if (ek) current.copy(reps = p.reps.toString())
-                        else current.copy(weight = kgText(p.weight).replace(',', '.'), reps = p.reps.toString()))
+                        else current.copy(weight = loadKg(p.weight).replace(',', '.'), reps = p.reps.toString()))
                 }
             }
         }
@@ -580,7 +580,7 @@ private fun PredictionRow(p: Prediction, ek: Boolean, onApply: () -> Unit) {
         -1 -> Triple(Icons.Outlined.SouthEast, scheme.error, "fallend")
         else -> Triple(Icons.Outlined.East, SubtleText, "gleich")
     }
-    val text = if (ek) "${p.reps} Wdh." else "${kgText(p.weight)} kg × ${p.reps}"
+    val text = if (ek) "${p.reps} Wdh." else "${loadKg(p.weight)} kg × ${p.reps}"
     Row(Modifier.padding(top = 8.dp, end = 6.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))
         .clickable(onClickLabel = "Prognose übernehmen", onClick = onApply)
         .padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -606,10 +606,10 @@ private fun BodyLoadField(value: String, bands: List<Band>, modifier: Modifier, 
             Box(Modifier.size(12.dp).clip(RoundedCornerShape(6.dp)).background(Color(bandArgb(band.color))))
             Spacer(Modifier.width(6.dp))
             Text("EK", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-            Text(" −${kgText(band.kg)}", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(" −${loadKg(band.kg)}", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         } else {
             Text("EK", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
-            if (load.extraKg > 0) Text(" +${kgText(load.extraKg)}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            if (load.extraKg > 0) Text(" +${loadKg(load.extraKg)}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
         if (band != null || load.extraKg > 0) {
             Spacer(Modifier.width(4.dp))
@@ -624,7 +624,7 @@ private fun BodyLoadField(value: String, bands: List<Band>, modifier: Modifier, 
 private fun BodyLoadDialog(load: BodyLoad, bands: List<Band>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     var mode by remember { mutableStateOf(when { load.bandId.isNotBlank() -> "band"; load.extraKg > 0 -> "extra"; else -> "ek" }) }
-    var extra by remember { mutableStateOf(if (load.extraKg > 0) kgText(load.extraKg) else "") }
+    var extra by remember { mutableStateOf(if (load.extraKg > 0) loadKg(load.extraKg) else "") }
     var bandId by remember { mutableStateOf(load.bandId.takeIf { id -> bands.any { it.id == id } } ?: bands.firstOrNull()?.id.orEmpty()) }
     val extraValue = extra.toWeightOrNull()?.takeIf { it > 0 && it <= 300 }
     val valid = when (mode) { "extra" -> extraValue != null; "band" -> bandId.isNotBlank(); else -> true }
@@ -658,7 +658,7 @@ private fun BodyLoadDialog(load: BodyLoad, bands: List<Band>, onDismiss: () -> U
                             Spacer(Modifier.width(10.dp))
                             Text(b.color, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
                                 color = if (bandId == b.id) scheme.onPrimaryContainer else scheme.onSurface)
-                            Text("−${kgText(b.kg)} kg", color = if (bandId == b.id) scheme.onPrimaryContainer else SubtleText)
+                            Text("−${loadKg(b.kg)} kg", color = if (bandId == b.id) scheme.onPrimaryContainer else SubtleText)
                         }
                     }
                 }

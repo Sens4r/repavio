@@ -47,24 +47,24 @@ fun parseBodyLoad(value: String): BodyLoad? =
     else if (value.isBlank()) BodyLoad() else value.toWeightOrNull()?.let { BodyLoad(extraKg = it) }
 fun bandLoad(id: String) = BAND_PREFIX + id
 
-fun kgText(value: Double): String = if (value % 1.0 == 0.0) value.toInt().toString()
+fun loadKg(value: Double): String = if (value % 1.0 == 0.0) value.toInt().toString()
     else String.format(Locale.GERMANY, "%.1f", value).removeSuffix(",0")
 
 /** Kurzlabel für Kachel und Analyse, z. B. "EK", "EK +10 kg", "EK − Rot 15 kg". */
 fun bodyLoadLabel(load: BodyLoad, bands: List<Band>): String {
     val band = bands.firstOrNull { it.id == load.bandId }
     return when {
-        band != null -> "EK − ${band.color} ${kgText(band.kg)} kg"
+        band != null -> "EK − ${band.color} ${loadKg(band.kg)} kg"
         load.bandId.isNotBlank() -> "EK (Band fehlt)"
-        load.extraKg > 0 -> "EK +${kgText(load.extraKg)} kg"
+        load.extraKg > 0 -> "EK +${loadKg(load.extraKg)} kg"
         else -> "EK"
     }
 }
 
 fun loggedLoadLabel(e: LoggedExercise): String = when {
-    !e.bodyweight -> "${kgText(e.weight)} kg"
-    e.bandKg > 0 -> "EK − ${e.bandName} ${kgText(e.bandKg)} kg"
-    e.extraKg > 0 -> "EK +${kgText(e.extraKg)} kg"
+    !e.bodyweight -> "${loadKg(e.weight)} kg"
+    e.bandKg > 0 -> "EK − ${e.bandName} ${loadKg(e.bandKg)} kg"
+    e.extraKg > 0 -> "EK +${loadKg(e.extraKg)} kg"
     else -> "EK"
 }
 

@@ -297,7 +297,7 @@ private fun BandsCard(bands: List<Band>, onChange: (List<Band>) -> Unit) {
                 Box(Modifier.size(18.dp).clip(RoundedCornerShape(9.dp)).background(Color(bandArgb(band.color))))
                 Spacer(Modifier.width(12.dp))
                 Text(band.color, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text("−${kgText(band.kg)} kg", fontSize = 13.sp, color = SubtleText)
+                Text("−${loadKg(band.kg)} kg", fontSize = 13.sp, color = SubtleText)
             }
         }
         TextButton(onClick = { editing = Band(color = BAND_COLORS.first().first, kg = 0.0) }) {
@@ -309,7 +309,7 @@ private fun BandsCard(bands: List<Band>, onChange: (List<Band>) -> Unit) {
     editing?.let { band ->
         val isNew = bands.none { it.id == band.id }
         var color by remember(band.id) { mutableStateOf(band.color) }
-        var kg by remember(band.id) { mutableStateOf(if (band.kg > 0) kgText(band.kg) else "") }
+        var kg by remember(band.id) { mutableStateOf(if (band.kg > 0) loadKg(band.kg) else "") }
         val value = kg.toWeightOrNull()
         val candidate = band.copy(color = color, kg = value ?: 0.0)
         AlertDialog(onDismissRequest = { editing = null }, containerColor = CardBackground, shape = RoundedCornerShape(28.dp),
