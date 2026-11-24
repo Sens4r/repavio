@@ -33,6 +33,8 @@ fun SettingsScreen(
     sounds: RepavioSounds,
     tabConfig: TabConfig = TabConfig(),
     onTabConfig: (TabConfig) -> Unit = {},
+    newsEnabled: Boolean = true,
+    onNewsEnabled: (Boolean) -> Unit = {},
     onExport: () -> Unit,
     onImport: () -> Unit,
     onChooseFolder: () -> Unit,
@@ -200,6 +202,19 @@ fun SettingsScreen(
             }
             "bedienung" -> {
                 item { TabsCard(tabConfig, onTabConfig) }
+                item {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                        .background(CardBackground).padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.NewReleases, null, modifier = Modifier.size(22.dp), tint = SubtleText)
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Neuigkeiten nach Updates", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text("Kurzes Pop-up bei neuen Funktionen", fontSize = 12.sp, color = SubtleText)
+                        }
+                        Switch(checked = newsEnabled, onCheckedChange = onNewsEnabled)
+                    }
+                }
                 item {
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
                     .background(CardBackground).padding(horizontal = 16.dp, vertical = 10.dp),

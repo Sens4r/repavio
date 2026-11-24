@@ -93,7 +93,15 @@ fun RepavioApp() {
     val backup = remember(context) { BackupManager(context) }
     val sounds = remember(context) { RepavioSounds(context) }
     DisposableEffect(sounds) { onDispose { sounds.release() } }
-    var showIntro by remember { mutableStateOf(!store.introductionSeen()) }
+    val currentVersion = remember { runCatching { RepavioUpdates.installedVersion(context) }.getOrDefault("0.0.0") }
+    val wasUpdated = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).let { it.lastUpdateTime > it.firstInstallTime } }
+            .getOrDefault(false)
+    }
+    var newsEnabled by remember { mutableStateOf(!store.newsDisabled()) }
+    var pendingNews by remember { mutableStateOf(newsToShow(currentVersion, store.newsSeen(), wasUpdated, store.newsDisabled())) }
+    // Ohne Neuigkeiten (Neuinstallation, Bugfix-Version) gilt die Version sofort als gesehen.
+    LaunchedEffect(Unit) { if (pendingNews.isEmpty()) store.setNewsSeen(currentVersion) }
     var app by remember { mutableStateOf(store.load()) }
     var pendingImport by remember { mutableStateOf<String?>(null) }
     var importError by remember { mutableStateOf<String?>(null) }
@@ -249,6 +257,8 @@ fun RepavioApp() {
                         onOpenProfile = { tabState = 3 })
                     else -> SettingsScreen(backup, sounds,
                         tabConfig = tabConfig,
+                        newsEnabled = newsEnabled,
+                        onNewsEnabled = { on -> newsEnabled = on; store.setNewsDisabled(!on) },
                         onTabConfig = { next -> tabConfig = sanitizeTabs(next); store.saveTabs(tabConfig) },
                         onExport = { exportLauncher.launch("repavio_Backup.json") },
                         onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
@@ -292,7 +302,7 @@ fun RepavioApp() {
             }
         }
         // Android's download manager handles transfer; installation remains user-initiated.
-        if (availableUpdate != null && !showIntro && !showingBrand && !resetRequested) {
+        if (availableUpdate != null && pendingNews.isEmpty() && !showingBrand && !resetRequested) {
             val release = availableUpdate!!
             val modern = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
             AlertDialog(
@@ -452,7 +462,8 @@ fun RepavioApp() {
                         app = initialData()
                         store.save(app)
                         sounds.setEnabled(true)
-                        showIntro = true
+                        store.setNewsSeen(currentVersion)
+                        newsEnabled = true
                         tabState = 0
                         resetRequested = false
                     }) { Text("Alles löschen", color = MaterialTheme.colorScheme.error) }
@@ -460,11 +471,12 @@ fun RepavioApp() {
                 dismissButton = { TextButton(onClick = { resetRequested = false }) { Text("Abbrechen") } }
             )
         }
-        if (showIntro && !showingBrand && !resetRequested) {
-            IntroTourDialog(onClose = {
-                store.setIntroductionSeen(true)
-                showIntro = false
-            })
+        if (pendingNews.isNotEmpty() && !showingBrand && !resetRequested) {
+            NewsDialog(pendingNews) { neverAgain ->
+                store.setNewsSeen(currentVersion)
+                if (neverAgain) { store.setNewsDisabled(true); newsEnabled = false }
+                pendingNews = emptyList()
+            }
         }
         if (showingBrand) {
             Box(Modifier.fillMaxSize().background(ScreenBackground), contentAlignment = Alignment.Center) {

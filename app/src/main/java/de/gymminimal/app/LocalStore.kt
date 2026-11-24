@@ -25,8 +25,11 @@ class LocalStore(private val context: Context) {
 
     fun clear() { prefs.edit().clear().commit() }
 
-    fun introductionSeen(): Boolean = prefs.getBoolean("introduction_seen", false)
-    fun setIntroductionSeen(value: Boolean) { prefs.edit().putBoolean("introduction_seen", value).apply() }
+    /** Neuigkeiten-Pop-up: zuletzt gezeigte Version und dauerhaftes Abschalten. */
+    fun newsSeen(): String? = prefs.getString("news_seen", null)
+    fun setNewsSeen(version: String) { prefs.edit().putString("news_seen", version).apply() }
+    fun newsDisabled(): Boolean = prefs.getBoolean("news_disabled", false)
+    fun setNewsDisabled(value: Boolean) { prefs.edit().putBoolean("news_disabled", value).apply() }
 
 
     fun save(data: AppData) {

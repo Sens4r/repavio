@@ -13,6 +13,7 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 - Eigenkörpergewicht (seit V1.5.0, `Bodyweight.kt`): `bodyweight` an Übung/Alternative, `null` = automatisch für Calisthenics-Namen. Eingabewert `"0"` = nur EK, Zahl = Zusatzgewicht, `"band:<id>"` = Band. Gespeichert wird die effektive Last (Profilgewicht + Zusatz − Band, nie negativ) plus Aufschlüsselung. Bänder in `AppData.bands` (gemeinsame Liste), seit V1.5.2 direkt im Belastungs-Sheet der Übung angelegt/bearbeitet/gelöscht (nicht mehr unter Profil): Farbe, Spanne vom Etikett (von–bis, lb oder kg), gerechnet wird mit der Mitte in kg (`Band.kg`).
 - Prognose (seit V1.5.0): Epley-1RM der letzten ≤ 6 Einheiten, linearer Trend ±5 %, ab 2 Einheiten; Gewichtserhöhung (2,5 kg, unter 20 kg 1 kg) ab 2 Wdh. über dem letzten Wert; bei EK nur Wiederholungen. Seit V1.5.2 als Pfeil + Zahl direkt im kg-/Wdh.-Feld, nur bei Abweichung; höher grün (#7BD88F), niedriger rot (#FF8A80) – bewusste Ausnahme von „Akzente nur aus dem System“. Antippen der Zahl übernimmt den Wert.
 - Trainingsdauer: Stoppuhrzeit wird beim Abschluss als `Workout.durationMs` gespeichert (1 min bis 12 h).
+- Neuigkeiten-Pop-up (seit V1.5.2, `News.kt`): Einträge in `RELEASE_NEWS` nur für Versionen mit neuen Funktionen (kein Eintrag bei Bugfix/Performance → kein Pop-up), höchstens 5–6 kurze Punkte mit Symbol. Einmal pro Update, nicht nach Neuinstallation; übersprungene Versionen werden zusammengefasst. „Nicht mehr anzeigen“ bzw. Schalter unter Profil → Bedienung. Bei jedem Feature-Release Eintrag ergänzen. Kein Einführungs-Tutorial mehr.
 - Tabs (seit V1.5.0): Reihenfolge und Ausblenden unter Profil → Bedienung, gespeichert in `LocalStore` (`tabs`, nicht im Backup). Profil nie ausblendbar.
 - Alternativübungen sind nur Ersatz, kein zusätzlicher Block.
 - Nur gespeicherte Trainings zählen. Keine Nullwerte oder Lücken für Pausen, kein „verpasst“, keine Kalenderlogik für Phasen.
@@ -74,6 +75,6 @@ Nur `Sens4r/repavio` verändern. Vor Updates, die Daten betreffen, ein externes 
 | 1.4.5 | 24.11.2026 | Stoppuhr im Vollbild (Pieptöne einstellbar, Ducking, Bildschirm bleibt an, Reset bei „Training beenden“); auf dem Pixel bestätigt |
 | 1.5.0 | 24.11.2026 | Vorabversion: Ernährungstagebuch mit Rezepten (1.4.6 nie veröffentlicht, hier enthalten), Eigengewicht mit Zusatz/Bändern, Prognose, Trainingsdauer, Tabs anordnen/ausblenden |
 | 1.5.1 | 24.11.2026 | Kacheltext in „Hinzufügen“, Gewicht im Profil-Dialog änderbar |
-| 1.5.2 | 24.11.2026 | Vorschau-Änderungen: Prognose im Feld (grün/rot), Bänder direkt in der Übung mit Spanne lb/kg, Stoppuhr ohne Statuszeile; auf dem Pixel noch nicht bestätigt |
+| 1.5.2 | 24.11.2026 | Vorschau-Änderungen: Prognose im Feld (grün/rot), Bänder direkt in der Übung mit Spanne lb/kg, Stoppuhr ohne Statuszeile, Neuigkeiten-Pop-up statt Einführung; auf dem Pixel noch nicht bestätigt |
 
 Offen: Ernährung Stufe 3 (adaptiver Bedarf). Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.
