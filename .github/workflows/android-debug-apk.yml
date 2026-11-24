@@ -38,7 +38,7 @@ jobs:
       - name: Enforce dependency checksums
         # Every library and plugin must match ci/verification-metadata.xml (SHA-256), otherwise the
         # build fails. Only CI enforces it, so local Android Studio builds on other OSes still work.
-        run: cp ci/verification-metadata.xml gradle/verification-metadata.xml
+        run: mkdir -p gradle && cp ci/verification-metadata.xml gradle/verification-metadata.xml
 
       - name: Install Android API 36 platform
         run: |
@@ -93,7 +93,7 @@ jobs:
       - name: Enforce dependency checksums
         # Every library and plugin must match ci/verification-metadata.xml (SHA-256), otherwise the
         # build fails. Only CI enforces it, so local Android Studio builds on other OSes still work.
-        run: cp ci/verification-metadata.xml gradle/verification-metadata.xml
+        run: mkdir -p gradle && cp ci/verification-metadata.xml gradle/verification-metadata.xml
 
       - name: Install Android API 36 platform
         run: |
