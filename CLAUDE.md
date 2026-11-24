@@ -37,6 +37,7 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 - `data_extraction_rules.xml`: kein Cloud-Backup, kein Geräte-Umzug durch Android (`allowBackup=false` allein verhindert den Umzug nicht).
 - Website ohne Drittanbieter: Schriften lokal (`docs/assets/fonts`, SIL OFL), CSP-Meta erlaubt nur eigene Dateien und `api.github.com`; Links aus der API nur, wenn sie ins eigene Repo zeigen.
 - Keine Google Fonts, CDNs oder Tracker einbauen.
+- Abhängigkeiten: CI erzwingt SHA-256-Prüfsummen aus `ci/verification-metadata.xml` (wird vor dem Build nach `gradle/` kopiert). Bei neuen oder aktualisierten Bibliotheken/Plugins die Datei neu erzeugen (`gradle --write-verification-metadata sha256 :app:assembleDebug :app:assembleRelease :app:testDebugUnitTest` in CI, Ausgabe über das Job-Log holen) und die Änderungen im PR begründen. Nie einfach Einträge ergänzen, ohne die Quelle zu prüfen.
 
 ## Website
 - `docs/index.html` → GitHub Pages aus `main`/`docs`, Adresse https://sens4r.github.io/repavio/. Eine Datei, kein Build, keine externen Abhängigkeiten (Schriften lokal).
