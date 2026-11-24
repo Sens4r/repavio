@@ -35,6 +35,11 @@ jobs:
         with:
           gradle-version: '9.6.0'
 
+      - name: Enforce dependency checksums
+        # Every library and plugin must match ci/verification-metadata.xml (SHA-256), otherwise the
+        # build fails. Only CI enforces it, so local Android Studio builds on other OSes still work.
+        run: mkdir -p gradle && cp ci/verification-metadata.xml gradle/verification-metadata.xml
+
       - name: Install Android API 36 platform
         run: |
           set -euo pipefail
@@ -62,6 +67,9 @@ jobs:
     name: Sign and publish repavio release
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
+    # The signing key lives in the protected environment "signing": the job only gets it after
+    # the owner approves the run (Settings → Environments → signing → Required reviewers).
+    environment: signing
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -81,6 +89,11 @@ jobs:
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
         with:
           gradle-version: '9.6.0'
+
+      - name: Enforce dependency checksums
+        # Every library and plugin must match ci/verification-metadata.xml (SHA-256), otherwise the
+        # build fails. Only CI enforces it, so local Android Studio builds on other OSes still work.
+        run: mkdir -p gradle && cp ci/verification-metadata.xml gradle/verification-metadata.xml
 
       - name: Install Android API 36 platform
         run: |
