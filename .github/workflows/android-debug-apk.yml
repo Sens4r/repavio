@@ -48,11 +48,12 @@ jobs:
           gradle --no-daemon --write-verification-metadata sha256 :app:assembleDebug :app:assembleRelease :app:testDebugUnitTest
           cp gradle/verification-metadata.xml "$RUNNER_TEMP/verification-metadata.xml"
 
-      - name: TEMP upload verification metadata
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: verification-metadata
-          path: ${{ runner.temp }}/verification-metadata.xml
+      - name: TEMP print verification metadata
+        run: |
+          echo "===VM-BEGIN==="
+          gzip -9c gradle/verification-metadata.xml | base64 -w 0
+          echo
+          echo "===VM-END==="
 
       - name: Run unit tests
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
