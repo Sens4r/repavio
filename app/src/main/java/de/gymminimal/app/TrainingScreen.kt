@@ -40,7 +40,8 @@ import kotlin.math.abs
 @Composable
 fun TrainingScreen(
     app: AppData, update: ((AppData) -> AppData) -> Unit,
-    focus: Boolean = false, onFocusChange: (Boolean) -> Unit = {}
+    focus: Boolean = false, onFocusChange: (Boolean) -> Unit = {},
+    stopwatchTile: (@Composable () -> Unit)? = null, onWorkoutSaved: () -> Unit = {}
 ) {
     var selectedDay by remember { mutableIntStateOf((java.time.LocalDate.now().dayOfWeek.value - 1).coerceIn(0, 6)) }
     var editingExercise by remember { mutableStateOf<Exercise?>(null) }
@@ -165,6 +166,10 @@ fun TrainingScreen(
         }
         if (plan.enabled && plan.exercises.isNotEmpty()) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                if (focusActive && stopwatchTile != null) {
+                    stopwatchTile()
+                    Spacer(Modifier.height(10.dp))
+                }
                 Button(
                     onClick = { finishConfirm = true }, enabled = canFinish,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -283,6 +288,7 @@ fun TrainingScreen(
                     val result = finishWorkout(app, selectedDay, System.currentTimeMillis())
                     if (result != null) {
                         update { result }
+                        onWorkoutSaved()
                         feedback = "Training gespeichert."
                     } else {
                         feedback = "Bitte Gewichte und Wiederholungen prüfen."

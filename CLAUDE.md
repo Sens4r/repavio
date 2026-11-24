@@ -16,9 +16,9 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 - Ein Wochentagsplan ist pro Kalenderwoche nur einmal abschließbar.
 - Gleichnamige Übungen teilen eine Identität (`exerciseKey`, normalisierter Name). Identitätslogik nicht ohne Rücksprache ändern.
 - Feste Muskelgruppen: Bauch, Beine, Bizeps, Brust, Rücken, Schulter. Nicht ohne Wunsch erweitern.
-- Sound: nur der abschaltbare Wisch-Sound. Kein Klick- oder Abschlusssound.
-- Design: Minimal Dark, Material You. Keine Bildschirmtitel. Seit V1.4.1 (an die MCI-App angelehnt, aber ohne deren Branding): kräftige Typografie, große Rundungen (Karten 20–24 dp), neutrale Flächen, Akzente nur aus dem System (`primary`, `primaryContainer`), Tab-Leiste nur mit Icons (Training, Analyse, Ernährung, Profil; Einstellungen liegen im Profil), Vollbildmodus im Training (nur Übungen + Button, nicht gespeichert, Zurück verlässt ihn).
-- Nicht umsetzen ohne ausdrücklichen Wunsch: KI- oder Fragebogen-Trainingsplaner, Pausentimer, Einzelsatz-Erfassung, Cloud, Konten, Social, Werbung.
+- Sound: abschaltbarer Wisch-Sound und (seit V1.4.5) Stoppuhr-Pieptöne im Vollbild (kurz/doppelt, Abstände einstellbar, abschaltbar, Musik-Ducking, nur bei geöffneter App). Kein Klick- oder Abschlusssound.
+- Design: Minimal Dark, Material You. Keine Bildschirmtitel. Seit V1.4.1 (an die MCI-App angelehnt, aber ohne deren Branding): kräftige Typografie, große Rundungen (Karten 20–24 dp), neutrale Flächen, Akzente nur aus dem System (`primary`, `primaryContainer`), Tab-Leiste nur mit Icons (Training, Analyse, Ernährung, Profil; Einstellungen liegen im Profil), Vollbildmodus im Training (nur Übungen, Stoppuhr-Kachel + Button, nicht gespeichert, Zurück verlässt ihn).
+- Nicht umsetzen ohne ausdrücklichen Wunsch: KI- oder Fragebogen-Trainingsplaner, Pausentimer (die Stoppuhr seit V1.4.5 ist kein Pausentimer: kein Countdown, keine Satzlogik), Einzelsatz-Erfassung, Cloud, Konten, Social, Werbung.
 
 ## Technische Fixpunkte
 - `applicationId = "de.gymminimal.app"` **nie ändern** (sonst andere App, Datenverlust).
@@ -63,8 +63,9 @@ Nur `Sens4r/repavio` verändern. Vor Updates, die Daten betreffen, ein externes 
 | 1.3.6 | 21.11.2026 | Update 1.3.5 → 1.3.6 über den Downloadmanager auf dem Pixel bestätigt |
 | 1.4.0 | 21.11.2026 | „Keine Phase“, Analyse-Drill-down mit Fortschrittsgrafik, Calisthenics-Übungen, weniger empfindliches Wischen; Update und Funktionen auf dem Pixel bestätigt |
 | 1.4.1 | 22.11.2026 | Neues UI im MCI-Stil (Vorschau vom Nutzer freigegeben), Vollbildmodus, Icon-Tab-Leiste, Balkendiagramm im Übungsdetail, Einstellungen als Kategorie-Kacheln, schlankes Update-Popup; Update und UI auf dem Pixel bestätigt (Text in Einstellungs-Kacheln war abgeschnitten → in 1.4.2 behoben) |
-| 1.4.2 | 22.11.2026 | Profil (verschlüsselt, Avatar/Foto, Gewichtsverlauf, Alter automatisch), Ernährungs-Tab, Backup-Passwort, Einstellungen als Liste im Profil; auf dem Pixel noch nicht bestätigt |
-| 1.4.3 | 23.11.2026 | App-Icon in Systemfarben + Designsymbol; Website unter `docs/`; auf dem Pixel noch nicht bestätigt |
-| 1.4.4 | 24.11.2026 | Sicherheitsupdate (Update-Download in einem Durchgang, Import-Grenzen, PBKDF2 600k, kein Geräte-Umzug, Website ohne Google Fonts, Signier-Freigabe); auf dem Pixel noch nicht bestätigt |
+| 1.4.2 | 22.11.2026 | Profil (verschlüsselt, Avatar/Foto, Gewichtsverlauf, Alter automatisch), Ernährungs-Tab, Backup-Passwort, Einstellungen als Liste im Profil; auf dem Pixel bestätigt |
+| 1.4.3 | 23.11.2026 | App-Icon in Systemfarben + Designsymbol; Website unter `docs/`; auf dem Pixel bestätigt |
+| 1.4.4 | 24.11.2026 | Sicherheitsupdate (Update-Download in einem Durchgang, Import-Grenzen, PBKDF2 600k, kein Geräte-Umzug, Website ohne Google Fonts, Signier-Freigabe); Update und Signier-Freigabe bestätigt |
+| 1.4.5 | 24.11.2026 | Stoppuhr im Vollbild (Pieptöne einstellbar, Ducking, Bildschirm bleibt an, Reset bei „Training beenden“); auf dem Pixel noch nicht bestätigt |
 
-Offen: nichts Dringendes. Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.
+Offen: Ernährungs-Tracking Stufe 1 (Vorschau freigegeben; dann Regel „kein Essens-Logging“ anpassen). Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.
