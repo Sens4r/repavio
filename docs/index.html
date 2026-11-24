@@ -13,10 +13,16 @@
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" type="image/png" href="assets/repavio-icon-64.png">
 <link rel="apple-touch-icon" href="assets/repavio-icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Keine externen Anfragen außer der GitHub-API: Schriften liegen lokal (SIL OFL, siehe assets/fonts). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src https://api.github.com; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <style>
+@font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:swap;src:url(assets/fonts/Inter-Regular.woff2) format("woff2")}
+@font-face{font-family:Inter;font-style:normal;font-weight:500;font-display:swap;src:url(assets/fonts/Inter-Medium.woff2) format("woff2")}
+@font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;src:url(assets/fonts/Inter-SemiBold.woff2) format("woff2")}
+@font-face{font-family:Inter;font-style:normal;font-weight:700;font-display:swap;src:url(assets/fonts/Inter-Bold.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400;font-display:swap;src:url(assets/fonts/JetBrainsMono-Regular.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:500;font-display:swap;src:url(assets/fonts/JetBrainsMono-Medium.woff2) format("woff2")}
 :root{
   --bg:#07060B; --bg2:#0C0A13; --surface:#110F1A; --surface2:#16131F;
   --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
@@ -482,7 +488,7 @@ footer small{color:var(--dim);font-size:13px}
       <a href="#faq">FAQ</a>
       <a href="https://github.com/Sens4r/repavio" target="_blank" rel="noopener">GitHub</a>
     </nav>
-    <small>© <span id="yr">2026</span> Sensa</small>
+    <small>© <span id="yr">2026</span> Sensa · Schriften: <a href="assets/fonts/Inter-OFL.txt">Inter</a>, <a href="assets/fonts/JetBrainsMono-OFL.txt">JetBrains Mono</a> (SIL OFL)</small>
   </div>
 </footer>
 
@@ -500,10 +506,14 @@ footer small{color:var(--dim);font-size:13px}
     if (items.length) return `<ul>${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`;
     return lines.length ? `<p>${esc(lines.slice(0, 2).join(' '))}</p>` : '<p>Details auf GitHub.</p>';
   }
+  // Nur Links in das eigene Repo übernehmen, egal was die API liefert.
+  const REPO = 'https://github.com/Sens4r/repavio/';
+  const own = u => typeof u === 'string' && u.startsWith(REPO) ? u : REPO + 'releases';
   function renderLog(list, live) {
-    const stable = list.filter(r => !r.draft && !r.prerelease).slice(0, 4);
+    if (!Array.isArray(list)) return;
+    const stable = list.filter(r => r && !r.draft && !r.prerelease && /^v\d+\.\d+\.\d+$/.test(r.tag_name || '')).slice(0, 4);
     $('#log').innerHTML = stable.map((r, n) => `
-      <a class="rel" href="${esc(r.html_url)}" target="_blank" rel="noopener">
+      <a class="rel" href="${esc(own(r.html_url))}" target="_blank" rel="noopener">
         <div class="tag">${esc(r.tag_name)}${r.published_at ? `<small>${esc(day(r.published_at))}</small>` : ''}${n === 0 ? '<em>aktuell</em>' : ''}</div>
         <div>${bullets(r.body)}</div>
       </a>`).join('');
@@ -513,8 +523,8 @@ footer small{color:var(--dim);font-size:13px}
       const v = latest.tag_name.replace(/^v/, '');
       $('#heroVer').textContent = 'repavio ' + v; $('#heroNote').textContent = '';
       $('#dlVer').textContent = 'Version ' + v + (latest.published_at ? ' · ' + day(latest.published_at) : '');
-      const apk = (latest.assets || []).find(a => /\.apk$/.test(a.name));
-      if (apk) { $('#dlBtn').href = apk.browser_download_url; $('#dlSize').textContent = (apk.size / 1048576).toFixed(1).replace('.', ',') + ' MB'; }
+      const apk = (latest.assets || []).find(a => a && a.name === `repavio-${latest.tag_name}-release.apk`);
+      if (apk && own(apk.browser_download_url) === apk.browser_download_url && apk.size > 0) { $('#dlBtn').href = apk.browser_download_url; $('#dlSize').textContent = (apk.size / 1048576).toFixed(1).replace('.', ',') + ' MB'; }
     }
   }
   renderLog(FALLBACK, false);

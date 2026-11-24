@@ -6,7 +6,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.outlined.Settings
 import android.os.Bundle
-import android.graphics.BitmapFactory
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Restaurant
@@ -96,7 +95,7 @@ fun RepavioApp() {
     var profile by remember { mutableStateOf(profileStore.load()) }
     var photoBytes by remember { mutableStateOf(profileStore.loadPhoto()) }
     val photo = remember(photoBytes) {
-        photoBytes?.let { runCatching { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }.getOrNull() }
+        profileStore.photoBitmap(photoBytes)?.asImageBitmap()
     }
     var backupPasswordSet by remember { mutableStateOf(profileStore.hasBackupPassword()) }
     var passwordBusy by remember { mutableStateOf(false) }
@@ -149,7 +148,7 @@ fun RepavioApp() {
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) try {
-            pendingImport = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            pendingImport = context.contentResolver.openInputStream(uri)?.use { readLimited(it) }
                 ?: error("Datei konnte nicht geöffnet werden")
         } catch (_: Exception) { importError = "Datei konnte nicht gelesen werden." }
     }
@@ -207,7 +206,7 @@ fun RepavioApp() {
                         onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                         onChooseFolder = { folderLauncher.launch(null) },
                         onRestore = { file ->
-                            try { pendingImport = file.readText(Charsets.UTF_8) }
+                            try { pendingImport = file.inputStream().use { readLimited(it) } }
                             catch (_: Exception) { importError = "Sicherung konnte nicht gelesen werden." }
                         },
                         onReset = { resetRequested = true },
@@ -459,4 +458,17 @@ private fun IconTabBar(selected: Int, onSelect: (Int) -> Unit) {
             }
         }
     }
+}
+
+/** Backups are untrusted input: refuse files larger than 25 MB instead of reading them into memory. */
+private fun readLimited(input: java.io.InputStream, maxBytes: Int = 25 * 1024 * 1024): String {
+    val out = java.io.ByteArrayOutputStream()
+    val buffer = ByteArray(64 * 1024)
+    while (true) {
+        val n = input.read(buffer)
+        if (n == -1) break
+        out.write(buffer, 0, n)
+        require(out.size() <= maxBytes) { "Datei zu groß" }
+    }
+    return out.toString(Charsets.UTF_8.name())
 }

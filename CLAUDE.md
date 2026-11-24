@@ -30,8 +30,16 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 
 - App-Icon: adaptiv. Ab Android 12 `mipmap-anydpi-v31` mit Systemfarben (`system_accent1_700` Hintergrund, Glyph in `system_accent1_100`); `monochrome`-Ebene für „Designsymbole“ (Android 13+). Davor schwarz auf weiß.
 
+## Sicherheit (Prüfung 24.11.2026)
+- Signieren nur im GitHub-Environment `signing` mit Pflichtfreigabe durch den Nutzer (Release-Job `environment: signing`). Secrets dort, nicht auf Repo-Ebene. Nach dem Merge den Nutzer auf die ausstehende Freigabe hinweisen.
+- Update-Download: SHA-256 und Kopie nach Downloads in einem Durchgang in einen `IS_PENDING`-Eintrag; erst nach Übereinstimmung sichtbar.
+- Importierte Backups sind nicht vertrauenswürdig: Dateigröße ≤ 25 MB, PBKDF2-Iterationen 100 000–2 000 000, Salt 16–64 Byte, Profilfoto ≤ 1,5 MB und ≤ 1024 px. Neue Backup-Passwörter: 600 000 Iterationen.
+- `data_extraction_rules.xml`: kein Cloud-Backup, kein Geräte-Umzug durch Android (`allowBackup=false` allein verhindert den Umzug nicht).
+- Website ohne Drittanbieter: Schriften lokal (`docs/assets/fonts`, SIL OFL), CSP-Meta erlaubt nur eigene Dateien und `api.github.com`; Links aus der API nur, wenn sie ins eigene Repo zeigen.
+- Keine Google Fonts, CDNs oder Tracker einbauen.
+
 ## Website
-- `docs/index.html` → GitHub Pages aus `main`/`docs`, Adresse https://sens4r.github.io/repavio/. Eine Datei, kein Build, nur Google Fonts als Abhängigkeit.
+- `docs/index.html` → GitHub Pages aus `main`/`docs`, Adresse https://sens4r.github.io/repavio/. Eine Datei, kein Build, keine externen Abhängigkeiten (Schriften lokal).
 - Stil wie https://sens4r.github.io (Repo `Sens4r/sens4r.github.io`, raycast-inspiriert): Inter/JetBrains Mono, fast schwarz `#07060B`, Sensa-Logofarben, `prefers-reduced-motion` beachten. Hero-Hintergrund bewusst eigenes Motiv (Diagrammraster, atmende Balken, steigende Fortschrittslinien in App-Blau), nicht die Sensa-Lichtstrahlen.
 - Versionen und APK-Link werden live aus der GitHub-Releases-API geladen; Funktionstexte nur aus Code/Release-Notes ableiten, nichts erfinden. Bei neuen Funktionen Karten/FAQ mitpflegen.
 - Kein Impressum (privates, nicht geschäftliches Projekt, wie die Sensa-Seite).
@@ -56,5 +64,6 @@ Nur `Sens4r/repavio` verändern. Vor Updates, die Daten betreffen, ein externes 
 | 1.4.1 | 22.11.2026 | Neues UI im MCI-Stil (Vorschau vom Nutzer freigegeben), Vollbildmodus, Icon-Tab-Leiste, Balkendiagramm im Übungsdetail, Einstellungen als Kategorie-Kacheln, schlankes Update-Popup; Update und UI auf dem Pixel bestätigt (Text in Einstellungs-Kacheln war abgeschnitten → in 1.4.2 behoben) |
 | 1.4.2 | 22.11.2026 | Profil (verschlüsselt, Avatar/Foto, Gewichtsverlauf, Alter automatisch), Ernährungs-Tab, Backup-Passwort, Einstellungen als Liste im Profil; auf dem Pixel noch nicht bestätigt |
 | 1.4.3 | 23.11.2026 | App-Icon in Systemfarben + Designsymbol; Website unter `docs/`; auf dem Pixel noch nicht bestätigt |
+| 1.4.4 | 24.11.2026 | Sicherheitsupdate (Update-Download in einem Durchgang, Import-Grenzen, PBKDF2 600k, kein Geräte-Umzug, Website ohne Google Fonts, Signier-Freigabe); auf dem Pixel noch nicht bestätigt |
 
 Offen: nichts Dringendes. Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.

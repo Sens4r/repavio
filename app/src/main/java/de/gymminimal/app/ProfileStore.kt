@@ -43,7 +43,9 @@ class ProfileStore(private val context: Context) {
         prefs.getString("profile", null)?.let { decode(JSONObject(String(deviceDecrypt(it), Charsets.UTF_8))) }
             ?: Profile()
     } catch (_: Exception) {
-        Profile() // e.g. key lost: never crash, start with an empty profile
+        // Key lost or temporarily unavailable: never crash and never delete here.
+        // Unreadable data is simply overwritten by the next save.
+        Profile()
     }
 
     fun save(profile: Profile) {
@@ -67,7 +69,12 @@ class ProfileStore(private val context: Context) {
 
     // ---------- Backup password ----------
 
-    fun hasBackupPassword(): Boolean = prefs.contains("backup_key")
+    /** Only true if the wrapped key is still usable on this device. */
+    fun hasBackupPassword(): Boolean {
+        val wrapped = prefs.getString("backup_key", null) ?: return false
+        // Unusable here (e.g. after a device transfer): report "not set"; setting it again overwrites.
+        return try { deviceDecrypt(wrapped); true } catch (_: Exception) { false }
+    }
 
     /** Slow (PBKDF2): call off the main thread. */
     fun setBackupPassword(password: String) {
@@ -103,18 +110,36 @@ class ProfileStore(private val context: Context) {
 
     /** Slow (PBKDF2). Returns false on a wrong password or a damaged block. */
     fun restoreFromBackup(blob: JSONObject, password: String): Boolean = try {
-        val key = derive(password, unb64(blob.getString("salt")), blob.getInt("iter"))
+        // Values from a file are untrusted: bound the work factor and the sizes before using them.
+        val iterations = blob.getInt("iter")
+        require(iterations in MIN_IMPORT_ITERATIONS..MAX_IMPORT_ITERATIONS) { "Ungültige Parameter" }
+        val salt = unb64(blob.getString("salt"))
+        require(salt.size in 16..64) { "Ungültige Parameter" }
+        require(blob.getString("data").length <= MAX_BLOB_CHARS) { "Profil zu groß" }
+        val key = derive(password, salt, iterations)
         val cipher = Cipher.getInstance(AES_GCM).apply {
             init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, unb64(blob.getString("iv"))))
         }
         val json = JSONObject(String(cipher.doFinal(unb64(blob.getString("data"))), Charsets.UTF_8))
-        val photo = json.optString("photo").takeIf { it.isNotBlank() }?.let(::unb64)
+        val photo = json.optString("photo").takeIf { it.isNotBlank() }?.let(::unb64)?.takeIf(::isSafePhoto)
         save(decode(json).copy(hasPhoto = photo != null))
         savePhoto(photo)
         true
     } catch (_: Exception) { false }
 
     // ---------- Photo processing ----------
+
+    /** A stored photo must be a small JPEG/PNG; anything else is ignored instead of decoded. */
+    private fun isSafePhoto(bytes: ByteArray): Boolean {
+        if (bytes.size > MAX_PHOTO_BYTES) return false
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        return bounds.outWidth in 1..MAX_PHOTO_SIDE && bounds.outHeight in 1..MAX_PHOTO_SIDE
+    }
+
+    /** Decoded bitmap for display, or null if the stored data is not a sane image. */
+    fun photoBitmap(bytes: ByteArray?): Bitmap? =
+        bytes?.takeIf(::isSafePhoto)?.let { runCatching { BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull() }
 
     /** Square, max 512 px, EXIF-rotated JPEG. No copy of the original is kept. */
     fun preparePhoto(uri: Uri): ByteArray? = try {
@@ -214,6 +239,13 @@ class ProfileStore(private val context: Context) {
     companion object {
         private const val KEY_ALIAS = "repavio_profile_key"
         private const val AES_GCM = "AES/GCM/NoPadding"
-        private const val ITERATIONS = 150_000
+        // OWASP 2023 recommendation for PBKDF2-HMAC-SHA256. Older backups (150 000) stay readable
+        // because each backup carries its own iteration count.
+        private const val ITERATIONS = 600_000
+        private const val MIN_IMPORT_ITERATIONS = 100_000
+        private const val MAX_IMPORT_ITERATIONS = 2_000_000
+        private const val MAX_BLOB_CHARS = 4_000_000
+        private const val MAX_PHOTO_BYTES = 1_500_000
+        private const val MAX_PHOTO_SIDE = 1024
     }
 }

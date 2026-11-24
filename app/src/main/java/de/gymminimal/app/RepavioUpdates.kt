@@ -158,27 +158,9 @@ object RepavioUpdates {
                     }
                 }
             }
-            val digest = MessageDigest.getInstance("SHA-256")
-            var total = 0L
-            manager.openDownloadedFile(id).use { descriptor ->
-                FileInputStream(descriptor.fileDescriptor).use { source ->
-                    val buffer = ByteArray(32 * 1024)
-                    while (true) {
-                        val count = source.read(buffer)
-                        if (count == -1) break
-                        total += count
-                        if (total > MAX_APK_BYTES) error("Die APK ist zu groß")
-                        digest.update(buffer, 0, count)
-                    }
-                }
-            }
-            require(total > 0L) { "Leere Datei" }
-            val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
-            require(actualHash.equals(release.sha256, ignoreCase = true)) {
-                "APK-Prüfsumme stimmt nicht überein"
-            }
-
-            // Prevent unverified files from appearing as installable APKs.
+            // Hash and copy in ONE pass from the same file descriptor, into a still-pending
+            // (invisible) Downloads entry. Only a file whose bytes matched the expected SHA-256
+            // is ever made visible, so nothing can be swapped between check and publication.
             val resolver = context.contentResolver
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, filename)
@@ -189,12 +171,29 @@ object RepavioUpdates {
             val published = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                 ?: error("Speichern im Download-Ordner fehlgeschlagen")
             try {
+                val digest = MessageDigest.getInstance("SHA-256")
+                var total = 0L
                 manager.openDownloadedFile(id).use { descriptor ->
                     FileInputStream(descriptor.fileDescriptor).use { source ->
                         val output = resolver.openOutputStream(published)
                             ?: error("Speichern im Download-Ordner fehlgeschlagen")
-                        output.use { source.copyTo(it) }
+                        output.use { sink ->
+                            val buffer = ByteArray(32 * 1024)
+                            while (true) {
+                                val count = source.read(buffer)
+                                if (count == -1) break
+                                total += count
+                                if (total > MAX_APK_BYTES) error("Die APK ist zu groß")
+                                digest.update(buffer, 0, count)
+                                sink.write(buffer, 0, count)
+                            }
+                        }
                     }
+                }
+                require(total > 0L) { "Leere Datei" }
+                val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+                require(actualHash.equals(release.sha256, ignoreCase = true)) {
+                    "APK-Prüfsumme stimmt nicht überein"
                 }
                 if (resolver.update(published, ContentValues().apply {
                         put(MediaStore.Downloads.IS_PENDING, 0)

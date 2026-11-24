@@ -62,6 +62,9 @@ jobs:
     name: Sign and publish repavio release
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
+    # The signing key lives in the protected environment "signing": the job only gets it after
+    # the owner approves the run (Settings → Environments → signing → Required reviewers).
+    environment: signing
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
