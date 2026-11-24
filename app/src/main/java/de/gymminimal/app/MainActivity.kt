@@ -250,8 +250,6 @@ fun RepavioApp() {
                     else -> SettingsScreen(backup, sounds,
                         tabConfig = tabConfig,
                         onTabConfig = { next -> tabConfig = sanitizeTabs(next); store.saveTabs(tabConfig) },
-                        bands = app.bands,
-                        onBands = { next -> update { it.copy(bands = next) } },
                         onExport = { exportLauncher.launch("repavio_Backup.json") },
                         onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                         onChooseFolder = { folderLauncher.launch(null) },

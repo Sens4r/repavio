@@ -131,7 +131,10 @@ class LocalStore(private val context: Context) {
             }) }
         })
         put("bands", JSONArray().apply {
-            data.bands.forEach { b -> put(JSONObject().apply { put("id", b.id); put("color", b.color); put("kg", b.kg) }) }
+            data.bands.forEach { b -> put(JSONObject().apply {
+                put("id", b.id); put("color", b.color); put("kg", b.kg)
+                put("min", b.min); put("max", b.max); put("unit", b.unit)
+            }) }
         })
         put("choices", JSONObject().apply {
             data.choices.forEach { (key, c) -> put(key, JSONObject().apply {
@@ -215,7 +218,12 @@ class LocalStore(private val context: Context) {
         }.filter { name -> name.isNotBlank() && name !in MUSCLE_GROUPS && name != "Sonstige" }
         val bands = root.optJSONArray("bands")?.let { arr ->
             (0 until minOf(arr.length(), 50)).mapNotNull { i ->
-                arr.optJSONObject(i)?.let { Band(it.optString("id").ifBlank { makeId() }, it.optString("color"), it.optDouble("kg")) }
+                arr.optJSONObject(i)?.let {
+                    // Ältere Bänder (1.5.0) haben nur "kg": dann ist die Spanne ein einzelner Wert.
+                    val kg = it.optDouble("kg")
+                    Band(it.optString("id").ifBlank { makeId() }, it.optString("color"),
+                        it.optDouble("min", kg), it.optDouble("max", it.optDouble("min", kg)), it.optString("unit", "kg"))
+                }
                     ?.takeIf(::validBand)
             }
         } ?: emptyList()

@@ -98,6 +98,17 @@ class BodyweightTest {
         assertEquals(moveTab(t, TAB_PROFILE, 1), t)
     }
 
+    @Test fun bandRangeUsesMiddleInKg() {
+        val lila = Band("b2", "Lila", 35.0, 85.0, "lb")
+        assertEquals(27.2, lila.kg, 0.001)
+        assertEquals("35–85 lb", bandRangeText(lila))
+        assertTrue(validBand(lila))
+        assertFalse(validBand(lila.copy(min = 90.0)))
+        assertFalse(validBand(lila.copy(unit = "stone")))
+        assertEquals("20 kg", bandRangeText(band))
+        assertEquals(20.0, band.kg, 0.0)
+    }
+
     @Test fun durationFormatting() {
         assertEquals("45 min", durationText(45 * 60_000L))
         assertEquals("1 h 5 min", durationText(65 * 60_000L))
