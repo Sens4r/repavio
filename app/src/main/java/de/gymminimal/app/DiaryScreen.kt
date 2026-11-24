@@ -347,7 +347,7 @@ private fun AddFoodScreen(log: FoodLog, day: String, meal: Int, onLog: (FoodLog)
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ActionTile("Schnelleingabe", "kcal & Makros direkt", Modifier.weight(1f)) { quick = true }
                     ActionTile("Von gestern kopieren",
                         if (hasYesterday) "${MEALS[meal]} · ${kcalText(yesterdayMeal.kcal)} kcal" else "Gestern nichts eingetragen",
@@ -355,7 +355,7 @@ private fun AddFoodScreen(log: FoodLog, day: String, meal: Int, onLog: (FoodLog)
                         onLog(copyMeal(log, yesterday, day, meal) { newId("e") }); onClose()
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ActionTile("Eigenes Lebensmittel", "Nährwerte vom Etikett", Modifier.weight(1f)) { newCustom = true }
                     ActionTile("Rezept anlegen", "aus mehreren Zutaten", Modifier.weight(1f)) {
                         recipeEditor = Recipe(newId("r:"), "", 1, emptyList())
@@ -409,12 +409,13 @@ private fun FoodRow(food: Food, tag: String?, onClick: () -> Unit) {
 
 @Composable
 private fun ActionTile(title: String, subtitle: String, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
-    Column(modifier.height(64.dp).clip(RoundedCornerShape(18.dp)).background(CardBackground)
+    // Mindesthöhe statt fester Höhe: Bei großer Systemschrift umbrechen statt abschneiden.
+    Column(modifier.heightIn(min = 64.dp).fillMaxHeight().clip(RoundedCornerShape(18.dp)).background(CardBackground)
         .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.Center) {
-        Text(title, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1,
+        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically)) {
+        Text(title, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 17.sp,
             color = if (enabled) MaterialTheme.colorScheme.onSurface else SubtleText)
-        Text(subtitle, fontSize = 11.5.sp, color = SubtleText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(subtitle, fontSize = 11.5.sp, lineHeight = 14.sp, color = SubtleText)
     }
 }
 

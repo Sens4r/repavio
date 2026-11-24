@@ -196,9 +196,13 @@ fun ProfileEditDialog(profile: Profile, onSave: (Profile) -> Unit, onDismiss: ()
     var sex by remember { mutableStateOf(profile.sex) }
     var height by remember { mutableStateOf(if (profile.heightCm > 0) profile.heightCm.toString() else "") }
     var activity by remember { mutableStateOf(profile.activity) }
+    val initialWeight = profile.currentWeight?.let(::kgText).orEmpty()
+    var weight by remember { mutableStateOf(initialWeight) }
+    val weightKg = if (weight.isBlank()) null else weight.replace(',', '.').toDoubleOrNull()?.takeIf(::validWeight)
     val birthIso = if (birth.isBlank()) "" else parseBirthDate(birth)
     val heightCm = if (height.isBlank()) 0 else height.toIntOrNull()?.takeIf(::validHeight)
-    val valid = birthIso != null && heightCm != null && name.length <= 40
+    val weightOk = weight.isBlank() || weightKg != null
+    val valid = birthIso != null && heightCm != null && name.length <= 40 && weightOk
     val scheme = MaterialTheme.colorScheme
     AlertDialog(onDismissRequest = onDismiss, containerColor = CardBackground, shape = RoundedCornerShape(28.dp),
         title = { Text("Profil bearbeiten", fontWeight = FontWeight.ExtraBold) },
@@ -228,6 +232,11 @@ fun ProfileEditDialog(profile: Profile, onSave: (Profile) -> Unit, onDismiss: ()
                     label = { Text("Größe (cm)") }, singleLine = true, isError = heightCm == null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(weight, { weight = it.filter { c -> c.isDigit() || c == ',' || c == '.' }.take(6) },
+                    label = { Text("Gewicht (kg)") }, singleLine = true, isError = !weightOk,
+                    supportingText = { Text("Eine Änderung wird als heutiger Eintrag im Verlauf gespeichert.") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth())
                 Text("Aktivität im Alltag", fontSize = 12.sp, color = SubtleText)
                 ACTIVITY_LEVELS.forEach { level ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
@@ -242,14 +251,15 @@ fun ProfileEditDialog(profile: Profile, onSave: (Profile) -> Unit, onDismiss: ()
                         }
                     }
                 }
-                Text("Das Gewicht trägst du über die Kachel „Gewicht“ ein, damit der Verlauf erhalten bleibt.",
-                    fontSize = 11.sp, color = SubtleText)
             }
         },
         confirmButton = {
             Button(enabled = valid, shape = RoundedCornerShape(24.dp), onClick = {
-                onSave(profile.copy(name = name.trim(), birthDate = birthIso!!, sex = sex,
-                    heightCm = heightCm!!, activity = activity))
+                val edited = profile.copy(name = name.trim(), birthDate = birthIso!!, sex = sex,
+                    heightCm = heightCm!!, activity = activity)
+                // Nur bei geänderter Eingabe: neuer Eintrag für heute (ersetzt einen heutigen), Verlauf bleibt.
+                onSave(if (weightKg != null && weight != initialWeight)
+                    addWeight(edited, weightKg, System.currentTimeMillis()) ?: edited else edited)
             }) { Text("Speichern", fontWeight = FontWeight.Bold) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } })
