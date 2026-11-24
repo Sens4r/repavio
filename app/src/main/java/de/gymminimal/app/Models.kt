@@ -125,7 +125,9 @@ data class Alternative(
     val reps: String = "10",
     val sets: Int = 3,
     val rest: Int = 90,
-    val exerciseKey: String = ""
+    val exerciseKey: String = "",
+    /** Eigenkörpergewicht: null = automatisch nach Name (Calisthenics). */
+    val bodyweight: Boolean? = null
 )
 
 data class Exercise(
@@ -137,7 +139,8 @@ data class Exercise(
     val rest: Int = 90,
     val alternatives: List<Alternative> = emptyList(),
     val muscleGroup: String = "Sonstige",
-    val exerciseKey: String = ""
+    val exerciseKey: String = "",
+    val bodyweight: Boolean? = null
 )
 
 data class DayPlan(
@@ -172,7 +175,14 @@ data class LoggedExercise(
     val weight: Double = 0.0,
     val reps: Int = 0,
     val sets: Int = 0,
-    val muscleGroup: String = "Sonstige"
+    val muscleGroup: String = "Sonstige",
+    /** EK-Übung: weight ist die effektive Last (Körpergewicht + Zusatz − Band). */
+    val bodyweight: Boolean = false,
+    val bodyKg: Double = 0.0,
+    val extraKg: Double = 0.0,
+    val bandKg: Double = 0.0,
+    val bandName: String = "",
+    val bandId: String = ""
 ) {
     val isPerformed: Boolean get() = status == "completed" || status == "replaced"
     val volume: Double get() = if (isPerformed) weight * reps * sets else 0.0
@@ -183,7 +193,9 @@ data class Workout(
     val phaseId: String,
     val planDay: Int,
     val timestamp: Long,
-    val entries: List<LoggedExercise>
+    val entries: List<LoggedExercise>,
+    /** Gestoppte Trainingsdauer, falls die Stoppuhr lief. */
+    val durationMs: Long? = null
 )
 
 data class ExerciseChoice(val status: String = "completed", val alternativeId: String = "")
@@ -197,7 +209,8 @@ data class AppData(
     val drafts: Map<String, Values> = emptyMap(),
     val pastPhases: List<Phase> = emptyList(),
     val customTags: List<String> = emptyList(),
-    val exerciseCatalog: List<ExerciseDefinition> = emptyList()
+    val exerciseCatalog: List<ExerciseDefinition> = emptyList(),
+    val bands: List<Band> = emptyList()
 ) {
     val completedInPhase: Int get() = history.count { it.phaseId == phase.id }
     val remainingInPhase: Int get() = if (phase.openEnded) Int.MAX_VALUE
@@ -207,10 +220,12 @@ data class AppData(
     // Drafts belong to the tile. Completed values belong to the canonical exercise ID.
     // This keeps Monday/Thursday drafts independent but syncs both after a completed workout.
     fun valueFor(id: String, base: Values): Values {
+        var bodyweight = false
         val canonicalId = plans.asSequence().flatMap { it.exercises.asSequence() }.firstNotNullOfOrNull { exercise ->
             when {
-                exercise.id == id -> exercise.exerciseKey.ifBlank { exercise.id }
+                exercise.id == id -> { bodyweight = exercise.isBodyweight; exercise.exerciseKey.ifBlank { exercise.id } }
                 else -> exercise.alternatives.firstOrNull { it.id == id }?.let { alt ->
+                    bodyweight = alt.isBodyweight
                     alt.exerciseKey.ifBlank { alt.id }
                 }
             }
@@ -219,12 +234,20 @@ data class AppData(
             .filter { it.phaseId == phase.id }
             .flatMap { it.entries.asSequence() }
             .firstOrNull { it.performedId == canonicalId && it.isPerformed }
-        return drafts[id] ?: if (newest != null) Values(
-            newest.weight.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() },
-            newest.reps.toString()
-        ) else base
+        drafts[id]?.let { return it }
+        if (newest == null) return base
+        val reps = newest.reps.toString()
+        return when {
+            // EK an- oder ausgeschaltet: alte Last passt nicht, nur die Wiederholungen übernehmen.
+            newest.bodyweight != bodyweight -> Values(base.weight, reps)
+            bodyweight -> Values(if (newest.bandId.isNotBlank() && bands.any { it.id == newest.bandId })
+                bandLoad(newest.bandId) else plainNumber(newest.extraKg), reps)
+            else -> Values(plainNumber(newest.weight), reps)
+        }
     }
 }
+
+private fun plainNumber(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()
 
 // Explicitly selected weekdays are the only source for sessions/week.
 fun selectedDays(plans: List<DayPlan>): Set<Int> = plans.filter { it.enabled }.map { it.day }.toSet()
@@ -291,7 +314,22 @@ fun hasWorkoutThisWeek(data: AppData, day: Int, timestamp: Long): Boolean {
     }
 }
 
-fun finishWorkout(data: AppData, day: Int, timestamp: Long): AppData? {
+/** Ein Eintrag aus den Eingabewerten. EK: Last = Körpergewicht (Profil) + Zusatz − Band. */
+private fun loggedFrom(data: AppData, originalId: String, performedId: String, name: String, status: String,
+                       values: Values, sets: Int, muscle: String, bodyweight: Boolean, bodyKg: Double?): LoggedExercise? {
+    val reps = values.reps.toRepsOrNull() ?: return null
+    if (!bodyweight) return LoggedExercise(originalId, performedId, name, status,
+        values.weight.toWeightOrNull() ?: return null, reps, sets, muscle)
+    val load = parseBodyLoad(values.weight) ?: return null
+    val band = data.bands.firstOrNull { it.id == load.bandId }
+    val body = bodyKg?.takeIf { it.isFinite() && it > 0 } ?: 0.0
+    val extra = if (band == null) load.extraKg else 0.0
+    return LoggedExercise(originalId, performedId, name, status, effectiveLoad(body, extra, band?.kg ?: 0.0), reps, sets,
+        muscle, bodyweight = true, bodyKg = body, extraKg = extra, bandKg = band?.kg ?: 0.0,
+        bandName = band?.color.orEmpty(), bandId = band?.id.orEmpty())
+}
+
+fun finishWorkout(data: AppData, day: Int, timestamp: Long, bodyKg: Double? = null, durationMs: Long? = null): AppData? {
     if (!data.phase.isConfigured || data.remainingInPhase == 0 || data.phase.finishedAt != null || hasWorkoutThisWeek(data, day, timestamp)) return null
     val plan = data.plan(day)
     if (!plan.enabled || plan.exercises.isEmpty()) return null
@@ -305,15 +343,13 @@ fun finishWorkout(data: AppData, day: Int, timestamp: Long): AppData? {
             "replaced" -> {
                 val alt = exercise.alternatives.firstOrNull { it.id == choice.alternativeId } ?: return null
                 val values = data.valueFor(alt.id, Values(alt.weight, alt.reps))
-                LoggedExercise(exercise.id, alt.exerciseKey.ifBlank { alt.id }, alt.name, "replaced",
-                    values.weight.toWeightOrNull() ?: return null,
-                    values.reps.toRepsOrNull() ?: return null, alt.sets, exercise.muscleGroup)
+                loggedFrom(data, exercise.id, alt.exerciseKey.ifBlank { alt.id }, alt.name, "replaced",
+                    values, alt.sets, exercise.muscleGroup, alt.isBodyweight, bodyKg) ?: return null
             }
             else -> {
                 val values = data.valueFor(exercise.id, Values(exercise.weight, exercise.reps))
-                LoggedExercise(exercise.id, exercise.exerciseKey.ifBlank { exercise.id }, exercise.name, "completed",
-                    values.weight.toWeightOrNull() ?: return null,
-                    values.reps.toRepsOrNull() ?: return null, exercise.sets, exercise.muscleGroup)
+                loggedFrom(data, exercise.id, exercise.exerciseKey.ifBlank { exercise.id }, exercise.name, "completed",
+                    values, exercise.sets, exercise.muscleGroup, exercise.isBodyweight, bodyKg) ?: return null
             }
         }
     }
@@ -329,7 +365,8 @@ fun finishWorkout(data: AppData, day: Int, timestamp: Long): AppData? {
     } }.toSet()
     return data.copy(
         history = data.history + Workout(phaseId = data.phase.id, planDay = day,
-            timestamp = timestamp, entries = entries),
+            timestamp = timestamp, entries = entries,
+            durationMs = durationMs?.takeIf { it in 60_000L..(12 * 3_600_000L) }),
         choices = data.choices - plan.exercises.map { it.id }.toSet(),
         drafts = data.drafts - (syncedTileIds + plan.exercises.flatMap {
             listOf(it.id) + it.alternatives.map { a -> a.id }

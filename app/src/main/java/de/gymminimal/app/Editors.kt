@@ -40,6 +40,22 @@ private fun EditorText(
     )
 }
 
+/** EK-Schalter. Calisthenics-Übungen sind automatisch EK, lassen sich aber abschalten. */
+@Composable
+private fun BodyweightSwitch(checked: Boolean, auto: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Eigenkörpergewicht (EK)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(when {
+                !checked -> "Gewicht in kg eintragen"
+                auto -> "Automatisch erkannt · Zusatz oder Band in der Kachel"
+                else -> "Zusatzgewicht oder Band in der Kachel wählen"
+            }, fontSize = 11.sp, color = SubtleText)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
 /** Local suggestions, matching beginnings first. */
 fun exerciseMatches(name: String, suggestions: List<String>): List<String> =
     if (name.isBlank()) emptyList() else suggestions.distinctBy(::exerciseNameKey)
@@ -98,6 +114,8 @@ fun ExerciseEditor(
             ?: if (defaultGroup in muscleOptions) defaultGroup else "")
     }
     var alts by remember(existing?.id) { mutableStateOf(existing?.alternatives ?: emptyList()) }
+    var bodyweight by remember(existing?.id) { mutableStateOf(existing?.bodyweight) }
+    val isEk = bodyweightFor(name, bodyweight)
     var openAlt by remember(existing?.id) { mutableStateOf<String?>(null) }
     var askDelete by remember { mutableStateOf(false) }
     var showGroups by remember { mutableStateOf(false) }
@@ -109,10 +127,11 @@ fun ExerciseEditor(
             openAlt = newAlt.id
         }
     }
-    val valid = name.isNotBlank() && group.isNotBlank() && group in muscleOptions && weight.toWeightOrNull() != null &&
+    fun loadOk(value: String, ek: Boolean) = if (ek) parseBodyLoad(value) != null else value.toWeightOrNull() != null
+    val valid = name.isNotBlank() && group.isNotBlank() && group in muscleOptions && loadOk(weight, isEk) &&
         reps.toRepsOrNull() != null && (sets.toIntOrNull() ?: 0) > 0 &&
         (rest.toIntOrNull() ?: -1) >= 0 && alts.all {
-            it.name.isNotBlank() && it.weight.toWeightOrNull() != null &&
+            it.name.isNotBlank() && loadOk(it.weight, it.isBodyweight) &&
                 it.reps.toRepsOrNull() != null && it.sets > 0 && it.rest >= 0
         }
 
@@ -156,8 +175,13 @@ fun ExerciseEditor(
                         }
                     }
                 }
+                BodyweightSwitch(isEk, auto = bodyweight == null && isCalisthenics(name)) { on ->
+                    bodyweight = on
+                    if (on && parseBodyLoad(weight) == null) weight = "0"
+                    if (!on && weight.toWeightOrNull() == null) weight = "0"
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EditorText(weight, { weight = it }, "Gewicht (kg)", Modifier.weight(1f), true)
+                    if (!isEk) EditorText(weight, { weight = it }, "Gewicht (kg)", Modifier.weight(1f), true)
                     EditorText(reps, { reps = it.filter(Char::isDigit) }, "Wiederholungen", Modifier.weight(1f), true)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -182,8 +206,12 @@ fun ExerciseEditor(
                             }
                             ExerciseNameField(alt.name, suggestions, "Name",
                                 onValueChange = { v -> updateAlt { it.copy(name = v) } })
+                            BodyweightSwitch(alt.isBodyweight, auto = alt.bodyweight == null && isCalisthenics(alt.name)) { on ->
+                                updateAlt { it.copy(bodyweight = on, weight = if (on && parseBodyLoad(it.weight) == null ||
+                                    !on && it.weight.toWeightOrNull() == null) "0" else it.weight) }
+                            }
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                EditorText(alt.weight, { v -> updateAlt { it.copy(weight = v) } },
+                                if (!alt.isBodyweight) EditorText(alt.weight, { v -> updateAlt { it.copy(weight = v) } },
                                     "Gewicht", Modifier.weight(1f), true)
                                 EditorText(alt.reps, { v -> updateAlt { it.copy(reps = v.filter(Char::isDigit)) } },
                                     "Wdh.", Modifier.weight(1f), true)
@@ -223,7 +251,7 @@ fun ExerciseEditor(
                     Button(enabled = valid, shape = RoundedCornerShape(10.dp), onClick = {
                         onSave(Exercise(id = existing?.id ?: makeId(), name = name.trim(),
                             weight = weight, reps = reps, sets = sets.toInt(), rest = rest.toInt(),
-                            alternatives = alts, muscleGroup = group))
+                            alternatives = alts, muscleGroup = group, bodyweight = bodyweight))
                     }) { Text("Speichern") }
                 }
             }

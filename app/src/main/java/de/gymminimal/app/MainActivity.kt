@@ -125,6 +125,8 @@ fun RepavioApp() {
     }
     val profileStore = remember(context) { ProfileStore(context) }
     var profile by remember { mutableStateOf(profileStore.load()) }
+    var foodLog by remember { mutableStateOf(profileStore.loadFoodLog()) }
+    val updateFoodLog: (FoodLog) -> Unit = { next -> foodLog = next; profileStore.saveFoodLog(next) }
     var photoBytes by remember { mutableStateOf(profileStore.loadPhoto()) }
     val photo = remember(photoBytes) {
         profileStore.photoBitmap(photoBytes)?.asImageBitmap()
@@ -201,7 +203,11 @@ fun RepavioApp() {
             }
         }
     }
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var tabConfig by remember { mutableStateOf(store.loadTabs()) }
+    val visibleTabs = tabConfig.visible
+    var tabState by rememberSaveable { mutableIntStateOf(visibleTabs.first()) }
+    // Ausgeblendete Tabs werden nie angezeigt; dann gilt der erste sichtbare.
+    val tab = if (tabState in visibleTabs) tabState else visibleTabs.first()
     val update: ((AppData) -> AppData) -> Unit = { transform ->
         val next = transform(app)
         if (next !== app) {
@@ -217,8 +223,8 @@ fun RepavioApp() {
             containerColor = ScreenBackground,
             bottomBar = {
                 // Icons only. Hidden in the training fullscreen mode.
-                if (!(tab == 0 && trainingFocus)) {
-                    IconTabBar(tab, onSelect = { tab = it })
+                if (!(tab == TAB_TRAINING && trainingFocus)) {
+                    IconTabBar(visibleTabs, tab, onSelect = { tabState = it })
                 }
             }
         ) { inset ->
@@ -235,11 +241,17 @@ fun RepavioApp() {
                                 stopwatchConfig = next; beeper.save(next)
                             }
                         },
-                        onWorkoutSaved = { stopwatch.reset() })
+                        onWorkoutSaved = { stopwatch.reset() },
+                        bodyKg = profile.currentWeight,
+                        workoutDuration = { stopwatch.elapsed().takeIf { it > 0 } })
                     1 -> AnalyzeScreen(app, update)
-                    2 -> NutritionScreen(profile, onGoal = { updateProfile(profile.copy(goal = it)) },
-                        onOpenProfile = { tab = 3 })
+                    2 -> NutritionScreen(profile, foodLog, updateFoodLog, onGoal = { updateProfile(profile.copy(goal = it)) },
+                        onOpenProfile = { tabState = 3 })
                     else -> SettingsScreen(backup, sounds,
+                        tabConfig = tabConfig,
+                        onTabConfig = { next -> tabConfig = sanitizeTabs(next); store.saveTabs(tabConfig) },
+                        bands = app.bands,
+                        onBands = { next -> update { it.copy(bands = next) } },
                         onExport = { exportLauncher.launch("repavio_Backup.json") },
                         onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                         onChooseFolder = { folderLauncher.launch(null) },
@@ -384,7 +396,7 @@ fun RepavioApp() {
                         try {
                             val restored = store.importJson(pendingImport!!)
                             app = restored
-                            tab = 0
+                            tabState = 0
                             pendingProfileBlob = runCatching {
                                 JSONObject(pendingImport!!).optJSONObject("profileEncrypted")
                             }.getOrNull()
@@ -410,9 +422,10 @@ fun RepavioApp() {
                         if (ok) {
                             profile = profileStore.load()
                             photoBytes = profileStore.loadPhoto()
+                            foodLog = profileStore.loadFoodLog()
                             backupPasswordSet = true
                             pendingProfileBlob = null
-                            tab = 3
+                            tabState = 3
                         } else restoreFailed = true
                     }
                 },
@@ -427,20 +440,22 @@ fun RepavioApp() {
             AlertDialog(
                 onDismissRequest = { resetRequested = false },
                 title = { Text("repavio zurücksetzen?") },
-                text = { Text("Alle Trainingsdaten, Pläne, Phasen, Tags, Entwürfe, Profil, Gewichtsverlauf, Einstellungen und interne Backups werden dauerhaft entfernt. Bereits exportierte Dateien bleiben erhalten. Vorher ein Backup exportieren, falls du etwas behalten möchtest.") },
+                text = { Text("Alle Trainingsdaten, Pläne, Phasen, Tags, Entwürfe, Profil, Gewichtsverlauf, Ernährungstagebuch, Einstellungen und interne Backups werden dauerhaft entfernt. Bereits exportierte Dateien bleiben erhalten. Vorher ein Backup exportieren, falls du etwas behalten möchtest.") },
                 confirmButton = {
                     TextButton(onClick = {
                         store.clear()
                         backup.clearLocalBackups()
                         profileStore.clear()
                         profile = Profile()
+                        foodLog = FoodLog()
+                        tabConfig = TabConfig()
                         photoBytes = null
                         backupPasswordSet = false
                         app = initialData()
                         store.save(app)
                         sounds.setEnabled(true)
                         showIntro = true
-                        tab = 0
+                        tabState = 0
                         resetRequested = false
                     }) { Text("Alles löschen", color = MaterialTheme.colorScheme.error) }
                 },
@@ -472,8 +487,8 @@ fun SectionEyebrow(text: String) {
 
 /** Icon-only tab bar, 64 dp above the system navigation area. */
 @Composable
-private fun IconTabBar(selected: Int, onSelect: (Int) -> Unit) {
-    val tabs = listOf(
+private fun IconTabBar(visible: List<Int>, selected: Int, onSelect: (Int) -> Unit) {
+    val all = listOf(
         Icons.Outlined.FitnessCenter to "Training",
         Icons.Outlined.BarChart to "Analyse",
         Icons.Outlined.Restaurant to "Ernährung",
@@ -482,7 +497,8 @@ private fun IconTabBar(selected: Int, onSelect: (Int) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().background(CardBackground).navigationBarsPadding().height(64.dp)
         .selectableGroup(), verticalAlignment = Alignment.CenterVertically) {
-        tabs.forEachIndexed { index, (icon, label) ->
+        visible.forEach { index ->
+            val (icon, label) = all[index]
             val active = index == selected
             Box(Modifier.weight(1f).fillMaxHeight()
                 .selectable(selected = active, onClick = { onSelect(index) }, role = Role.Tab),
