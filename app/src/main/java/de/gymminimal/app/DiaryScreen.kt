@@ -78,7 +78,7 @@ fun NutritionScreen(
     when {
         showNeed -> {
             BackHandler { showNeed = false }
-            NeedScreen(profile, onGoal, onOpenProfile, onBack = { showNeed = false })
+            NeedScreen(profile, log, onGoal, onOpenProfile, onBack = { showNeed = false })
         }
         addMeal >= 0 -> {
             BackHandler { addMeal = -1 }
@@ -97,7 +97,8 @@ private fun DiaryPage(
 ) {
     val scheme = MaterialTheme.colorScheme
     val day = dayKey(date)
-    val need = nutritionFor(profile)
+    val target = remember(profile, log) { nutritionTarget(profile, log) }
+    val need = target?.result
     val total = dayTotals(log, day)
     var editing by remember { mutableStateOf<DiaryEntry?>(null) }
 
@@ -136,7 +137,8 @@ private fun DiaryPage(
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     if (need != null) Text("${kcalText(total.kcal)} gegessen", color = onC.copy(alpha = .85f), fontSize = 12.sp)
-                    Text(if (need != null) "Ziel ${kcalText(need.kcal.toDouble())} ›" else "Ziel festlegen ›",
+                    Text(if (need != null) (if (target?.adaptive == true) "Ziel ${kcalText(need.kcal.toDouble())} · angepasst ›"
+                        else "Ziel ${kcalText(need.kcal.toDouble())} ›") else "Ziel festlegen ›",
                         color = onC, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onNeed).padding(4.dp))
                 }
@@ -434,8 +436,11 @@ private fun PortionSheet(
     val unit = if (ml) "ml" else "g"
     val defaultAmount = entry?.amount ?: food?.portions?.firstOrNull()?.grams ?: 100.0
     var amountText by remember { mutableStateOf(formatAmount(defaultAmount)) }
+    var amountUnit by remember { mutableStateOf("g") }
     var meal by remember { mutableIntStateOf(initialMeal) }
-    val amount = parseNumber(amountText)?.takeIf { it > 0 && it <= MAX_AMOUNT }
+    // Eingabe in g/ml, TL oder EL; gespeichert wird immer in g/ml.
+    val perAmountUnit = gramsPerUnit(food, amountUnit)
+    val amount = parseNumber(amountText)?.takeIf { it > 0 }?.times(perAmountUnit)?.takeIf { it <= MAX_AMOUNT }
     // Werte je Einheit: aus dem Lebensmittel oder, bei Einträgen, aus der gespeicherten Menge.
     val perUnit: Nutrients? = when {
         quickOnly -> null
@@ -448,7 +453,7 @@ private fun PortionSheet(
         amount != null && perUnit != null -> perUnit.scaled(amount)
         else -> null
     }
-    val step = if (ml) 50.0 else 10.0
+    val step = when (amountUnit) { "g" -> if (ml) 50.0 else 10.0; "Stück" -> 1.0; else -> 0.5 }
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBackground,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
@@ -469,12 +474,24 @@ private fun PortionSheet(
                 }
             }
             if (!quickOnly) {
+                UnitSelector(amountUnit, unit, food) { next ->
+                    val grams = amount
+                    amountUnit = next
+                    if (grams != null) {
+                        val per = gramsPerUnit(food, next)
+                        amountText = formatAmount(if (next == "g") Math.round(grams).toDouble()
+                            else (Math.round(grams / per * 2) / 2.0).coerceAtLeast(0.5))
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TextField(amountText, { amountText = it.filter { c -> c.isDigit() || c == ',' || c == '.' }.take(7) },
                         singleLine = true, modifier = Modifier.weight(1f),
                         textStyle = LocalTextStyle.current.copy(fontSize = 30.sp, fontWeight = FontWeight.ExtraBold,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center),
-                        suffix = { Text(unit, fontSize = 15.sp, color = SubtleText) }, isError = amount == null,
+                        suffix = {
+                            Text(if (amountUnit == "g") unit else "$amountUnit · = ${amount?.let(::formatGrams) ?: "–"} $unit",
+                                fontSize = 15.sp, color = SubtleText)
+                        }, isError = amount == null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         shape = RoundedCornerShape(20.dp),
                         colors = TextFieldDefaults.colors(focusedContainerColor = FieldBackground,
@@ -482,17 +499,20 @@ private fun PortionSheet(
                             focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
                             errorIndicatorColor = Color.Transparent))
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        StepBox("+", "Mehr") { amountText = formatAmount(((amount ?: 0.0) + step).coerceAtMost(MAX_AMOUNT)) }
-                        StepBox("−", "Weniger") { amountText = formatAmount(((amount ?: step) - step).coerceAtLeast(step / 2)) }
+                        val current = parseNumber(amountText)
+                        StepBox("+", "Mehr") { amountText = formatAmount(((current ?: 0.0) + step).coerceAtMost(MAX_AMOUNT / perAmountUnit)) }
+                        StepBox("−", "Weniger") { amountText = formatAmount(((current ?: step) - step).coerceAtLeast(step / 2)) }
                     }
                 }
-                val presets = buildList {
+                // Schnellwahl im Wert der gewählten Einheit.
+                val presets = if (amountUnit == "g") buildList {
                     add("100 $unit" to 100.0)
                     food?.portions?.forEach { add("${it.label} (${formatAmount(it.grams)} $unit)" to it.grams) }
-                }
+                } else if (amountUnit == "Stück") listOf(1.0, 2.0, 3.0, 4.0).map { "${formatAmount(it)} Stück" to it }
+                else listOf(0.5, 1.0, 2.0, 3.0).map { (if (it == 0.5) "½" else formatAmount(it)) + " $amountUnit" to it }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     presets.forEach { (label, value) ->
-                        val active = amount == value
+                        val active = parseNumber(amountText) == value
                         FilterChip(selected = active, onClick = { amountText = formatAmount(value) },
                             label = { Text(label, fontWeight = if (active) FontWeight.ExtraBold else FontWeight.SemiBold) },
                             shape = RoundedCornerShape(17.dp), border = null,
@@ -534,6 +554,28 @@ private fun PortionSheet(
                 TextButton(onClick = it, modifier = Modifier.fillMaxWidth()) {
                     Text("Eintrag entfernen", color = scheme.error, fontWeight = FontWeight.Bold)
                 }
+            }
+        }
+    }
+}
+
+/** Einheit wählen: g (bzw. ml), TL, EL – mit Gramm je Löffel darunter. */
+@Composable
+private fun UnitSelector(selected: String, baseUnit: String, food: Food?, onSelect: (String) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(FieldBackground).padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        amountUnits(food).forEach { u ->
+            val active = u == selected
+            Column(Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(18.dp))
+                .background(if (active) scheme.primary else Color.Transparent).clickable { onSelect(u) },
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                val color = if (active) scheme.onPrimary else scheme.onSurface
+                Text(if (u == "g") baseUnit else u, fontSize = 14.sp, color = color,
+                    fontWeight = if (active) FontWeight.ExtraBold else FontWeight.SemiBold)
+                Text(if (u == "g") (if (baseUnit == "ml") "Milliliter" else "Gramm") else "${formatGrams(gramsPerUnit(food, u))} $baseUnit",
+                    maxLines = 1,
+                    fontSize = 10.sp, color = color.copy(alpha = .8f))
             }
         }
     }
@@ -611,16 +653,23 @@ private fun CustomFoodDialog(existing: Food?, onDismiss: () -> Unit, onSave: (Fo
     val firstPortion = existing?.portions?.firstOrNull()
     var portionLabel by remember { mutableStateOf(firstPortion?.label.orEmpty()) }
     var portionAmount by remember { mutableStateOf(t(firstPortion?.grams)) }
+    var tlText by remember { mutableStateOf(t(existing?.tl)) }
+    var elText by remember { mutableStateOf(t(existing?.el)) }
+    var pieceText by remember { mutableStateOf(t(existing?.piece)) }
     var confirmDelete by remember { mutableStateOf(false) }
+    // Leer = Richtwert 5 / 15.
+    fun spoon(text: String) = if (text.isBlank()) null else parseNumber(text)
+    val spoonsOk = (tlText.isBlank() || spoon(tlText) != null) && (elText.isBlank() || spoon(elText) != null) &&
+        (pieceText.isBlank() || spoon(pieceText) != null)
 
     val numbers = listOf(kcal, protein, fat, carbs, fiber, sugar, salt).map(::optionalNumber)
     val portion = parseNumber(portionAmount)
     val food = if (numbers.any { it == null }) null else Food(existing?.id ?: newId("c:"), name.trim(),
         Nutrients(numbers[0]!!, numbers[1]!!, numbers[2]!!, numbers[3]!!, numbers[4]!!, numbers[5]!!, numbers[6]!!), ml,
         if (portionLabel.isNotBlank() && portion != null) listOf(FoodPortion(portionLabel.trim().take(30), portion))
-        else emptyList(), custom = true)
+        else emptyList(), custom = true, tl = spoon(tlText), el = spoon(elText), piece = spoon(pieceText))
     val portionOk = portionLabel.isBlank() && portionAmount.isBlank() || portionLabel.isNotBlank() && portion != null && portion > 0
-    val valid = food != null && kcal.isNotBlank() && validCustomFood(food) && portionOk
+    val valid = food != null && kcal.isNotBlank() && validCustomFood(food) && portionOk && spoonsOk
     val unit = if (ml) "ml" else "g"
 
     AlertDialog(onDismissRequest = onDismiss, containerColor = CardBackground, shape = RoundedCornerShape(28.dp),
@@ -657,6 +706,12 @@ private fun CustomFoodDialog(existing: Food?, onDismiss: () -> Unit, onSave: (Fo
                     OutlinedTextField(portionLabel, { portionLabel = it.take(30) }, label = { Text("z. B. 1 Riegel", fontSize = 12.sp) },
                         singleLine = true, shape = RoundedCornerShape(14.dp), modifier = Modifier.weight(1.4f))
                     NumberField(portionAmount, { portionAmount = it }, unit, Modifier.weight(1f), isError = !portionOk)
+                }
+                Text("Löffel und Stück (optional; Löffel sonst 5 / 15 $unit)", fontSize = 12.sp, color = SubtleText)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NumberField(tlText, { tlText = it }, "1 TL", Modifier.weight(1f), isError = tlText.isNotBlank() && spoon(tlText) == null)
+                    NumberField(elText, { elText = it }, "1 EL", Modifier.weight(1f), isError = elText.isNotBlank() && spoon(elText) == null)
+                    NumberField(pieceText, { pieceText = it }, "1 Stück", Modifier.weight(1f), isError = pieceText.isNotBlank() && spoon(pieceText) == null)
                 }
                 if (food != null && kcal.isNotBlank() && !validCustomFood(food) && name.isNotBlank()) {
                     Text("Werte prüfen: max. 950 kcal und zusammen max. 100 g Nährstoffe je 100 $unit.",
@@ -779,14 +834,14 @@ private fun RecipeEditor(
     }
 
     adding?.let { food ->
-        AmountDialog(food.name, food.portions.firstOrNull()?.grams ?: 100.0, if (food.ml) "ml" else "g",
+        AmountDialog(food.name, food.portions.firstOrNull()?.grams ?: 100.0, if (food.ml) "ml" else "g", food,
             onDismiss = { adding = null }) { amount ->
             ingredientFor(food, amount)?.let { ingredients = ingredients + it }
             adding = null; query = ""
         }
     }
     ingredients.getOrNull(editIndex)?.let { ing ->
-        AmountDialog(ing.name, ing.amount, if (ing.ml) "ml" else "g", onDismiss = { editIndex = -1 }) { amount ->
+        AmountDialog(ing.name, ing.amount, if (ing.ml) "ml" else "g", foodById(log, ing.foodId), onDismiss = { editIndex = -1 }) { amount ->
             ingredients = ingredients.mapIndexed { k, it ->
                 if (k == editIndex) it.copy(amount = amount, values = it.values.scaled(amount / it.amount)) else it
             }
@@ -804,12 +859,28 @@ private fun RecipeEditor(
 }
 
 @Composable
-private fun AmountDialog(title: String, initial: Double, unit: String, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
+private fun AmountDialog(title: String, initial: Double, unit: String, food: Food?, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
     var text by remember { mutableStateOf(formatAmount(initial)) }
-    val value = parseNumber(text)?.takeIf { it > 0 && it <= MAX_AMOUNT }
+    var amountUnit by remember { mutableStateOf("g") }
+    val per = gramsPerUnit(food, amountUnit)
+    // Rückgabe immer in g/ml.
+    val value = parseNumber(text)?.takeIf { it > 0 }?.times(per)?.takeIf { it <= MAX_AMOUNT }
     AlertDialog(onDismissRequest = onDismiss, containerColor = CardBackground, shape = RoundedCornerShape(28.dp),
         title = { Text(title, fontWeight = FontWeight.ExtraBold, maxLines = 2) },
-        text = { NumberField(text, { text = it }, "Menge ($unit)", Modifier.fillMaxWidth(), isError = value == null) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                UnitSelector(amountUnit, unit, food) { next ->
+                    val grams = value
+                    amountUnit = next
+                    if (grams != null) text = formatAmount(if (next == "g") Math.round(grams).toDouble()
+                        else (Math.round(grams / gramsPerUnit(food, next) * 2) / 2.0).coerceAtLeast(0.5))
+                }
+                NumberField(text, { text = it }, if (amountUnit == "g") "Menge ($unit)" else "Anzahl $amountUnit",
+                    Modifier.fillMaxWidth(), isError = value == null)
+                if (amountUnit != "g") Text("= ${value?.let(::formatGrams) ?: "–"} $unit · Löffel sind Richtwerte",
+                    fontSize = 12.sp, color = SubtleText)
+            }
+        },
         confirmButton = {
             Button(enabled = value != null, shape = RoundedCornerShape(24.dp), onClick = { onSave(value!!) }) {
                 Text("Übernehmen", fontWeight = FontWeight.Bold)

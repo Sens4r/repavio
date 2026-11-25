@@ -22,7 +22,11 @@ data class FoodPortion(val label: String, val grams: Double)
 data class Food(
     val id: String, val name: String, val per100: Nutrients,
     val ml: Boolean = false, val portions: List<FoodPortion> = emptyList(), val custom: Boolean = false,
-    val recipe: Boolean = false
+    val recipe: Boolean = false,
+    /** Gramm (bei Getränken ml) je Teelöffel und Esslöffel; null = Richtwert 5 / 15. */
+    val tl: Double? = null, val el: Double? = null,
+    /** Gramm je Stück (Ei, Banane, Scheibe …); null = Einheit „Stück“ nicht anbieten. */
+    val piece: Double? = null
 ) {
     val unit: String get() = if (ml) "ml" else "g"
 }
@@ -113,8 +117,24 @@ fun addWater(log: FoodLog, day: String, deltaMl: Int): FoodLog {
 fun toggleFavorite(log: FoodLog, foodId: String): FoodLog =
     log.copy(favorites = if (foodId in log.favorites) log.favorites - foodId else log.favorites + foodId)
 
+/** Mengeneinheiten bei der Eingabe: Gramm (bzw. ml), Teelöffel, Esslöffel, Stück (nur mit Stückgewicht). */
+fun amountUnits(food: Food?): List<String> = listOf("g", "TL", "EL") + if (food?.piece != null) listOf("Stück") else emptyList()
+const val DEFAULT_TL = 5.0
+const val DEFAULT_EL = 15.0
+
+/** Gramm (bzw. ml) je Einheit. Ohne eigene Angabe gelten 5 / 15 als Richtwert (Haushaltslöffel, wie Wasser). */
+fun gramsPerUnit(food: Food?, unit: String): Double = when (unit) {
+    "TL" -> food?.tl ?: DEFAULT_TL
+    "EL" -> food?.el ?: DEFAULT_EL
+    "Stück" -> food?.piece ?: 1.0
+    else -> 1.0
+}
+
+private fun validSpoon(v: Double?) = v == null || v.isFinite() && v in 0.5..100.0
+
 fun validCustomFood(food: Food): Boolean =
-    food.name.isNotBlank() && food.per100.valid && food.per100.kcal <= 950 &&
+    food.name.isNotBlank() && food.per100.valid && food.per100.kcal <= 950 && validSpoon(food.tl) && validSpoon(food.el) &&
+        (food.piece == null || food.piece.isFinite() && food.piece in 0.5..MAX_AMOUNT) &&
         food.per100.protein + food.per100.fat + food.per100.carbs + food.per100.fiber <= 100.5 &&
         food.portions.all { it.label.isNotBlank() && it.grams > 0 && it.grams <= MAX_AMOUNT }
 
