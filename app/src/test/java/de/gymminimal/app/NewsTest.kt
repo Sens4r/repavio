@@ -31,6 +31,11 @@ class NewsTest {
         assertTrue(newsToShow("1.6.0", "1.5.2", true, true, all).isEmpty())
     }
 
+    @Test fun updateFromOlderMinorShowsWholeSeries() {
+        assertEquals(listOf("1.5.3", "1.5.2"), newsToShow("1.5.3", null, true, false).map { it.version })
+        assertEquals(listOf("1.5.3"), newsToShow("1.5.3", "1.5.2", true, false).map { it.version })
+    }
+
     @Test fun versionComparison() {
         assertTrue(compareVersions("1.10.0", "1.9.9") > 0)
         assertEquals(0, compareVersions("v1.5.2", "1.5.2"))

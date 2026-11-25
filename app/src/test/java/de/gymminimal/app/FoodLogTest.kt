@@ -26,6 +26,20 @@ class FoodLogTest {
         }
     }
 
+    @Test fun everyBaseFoodKnowsSpoons() {
+        assertTrue(BASE_FOODS.size >= 200)
+        BASE_FOODS.forEach { f ->
+            assertTrue(f.name, f.tl != null && f.el != null)
+            assertTrue(f.name, f.tl!! in 0.5..20.0 && f.el!! in 1.0..40.0 && f.el!! >= f.tl!!)
+            assertTrue(f.name, f.portions.none { it.label.startsWith("1 TL") || it.label.startsWith("1 EL") })
+        }
+        val oil = BASE_FOODS.first { it.name == "Olivenöl" }
+        assertEquals(10.0, gramsPerUnit(oil, "EL"), 0.0)
+        assertEquals(15.0, gramsPerUnit(null, "EL"), 0.0)
+        assertEquals(1.0, gramsPerUnit(oil, "g"), 0.0)
+        assertFalse(validCustomFood(Food("c:x", "X", Nutrients(kcal = 100.0), el = 500.0)))
+    }
+
     @Test fun idsAreStable() {
         assertEquals("b:haehnchenbrust-roh", chicken.id)
         assertEquals("b:milch-1-5", BASE_FOODS.first { it.name == "Milch 1,5 %" }.id)
