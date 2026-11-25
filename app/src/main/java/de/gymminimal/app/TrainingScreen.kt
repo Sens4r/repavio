@@ -639,8 +639,9 @@ private fun BodyLoadSheet(name: String, load: BodyLoad, bands: List<Band>, bodyK
     val valid = mode != "band" || band != null
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBackground,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
-        Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 22.dp).verticalScroll(rememberScrollState()),
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 18.dp, end = 18.dp, bottom = 22.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column {
                 Text(name, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.3).sp)

@@ -14,6 +14,7 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 - Prognose (seit V1.5.0): Epley-1RM der letzten ≤ 6 Einheiten, linearer Trend ±5 %, ab 2 Einheiten; Gewichtserhöhung (2,5 kg, unter 20 kg 1 kg) ab 2 Wdh. über dem letzten Wert; bei EK nur Wiederholungen. Seit V1.5.2 als Pfeil + Zahl direkt im kg-/Wdh.-Feld, nur bei Abweichung; höher grün (#7BD88F), niedriger rot (#FF8A80) – bewusste Ausnahme von „Akzente nur aus dem System“. Antippen der Zahl übernimmt den Wert.
 - Trainingsdauer: Stoppuhrzeit wird beim Abschluss als `Workout.durationMs` gespeichert (1 min bis 12 h).
 - Neuigkeiten-Pop-up (seit V1.5.2, `News.kt`): Einträge in `RELEASE_NEWS` nur für Versionen mit neuen Funktionen (kein Eintrag bei Bugfix/Performance → kein Pop-up), höchstens 5–6 kurze Punkte mit Symbol. Einmal pro Update, nicht nach Neuinstallation; übersprungene Versionen werden zusammengefasst. „Nicht mehr anzeigen“ bzw. Schalter unter Profil → Bedienung. Darstellung seit V1.5.3: starke Abdunklung, Dialog #24272D, Fließtext #D2D5DC 15 sp. Erstes Update ohne gespeicherten Stand zeigt alle Einträge der aktuellen Hauptversion (x.y). Bei jedem Feature-Release Eintrag ergänzen. Kein Einführungs-Tutorial mehr.
+- Bottom-Sheets immer mit `skipPartiallyExpanded = true` und scrollbarem Inhalt; keine festen Höhen für Inhalte mit Text (Textgröße auf dem Pixel ist größer als im Emulator).
 - Tabs (seit V1.5.0): Reihenfolge und Ausblenden unter Profil → Bedienung, gespeichert in `LocalStore` (`tabs`, nicht im Backup). Profil nie ausblendbar.
 - Alternativübungen sind nur Ersatz, kein zusätzlicher Block.
 - Nur gespeicherte Trainings zählen. Keine Nullwerte oder Lücken für Pausen, kein „verpasst“, keine Kalenderlogik für Phasen.
@@ -76,6 +77,7 @@ Nur `Sens4r/repavio` verändern. Vor Updates, die Daten betreffen, ein externes 
 | 1.5.0 | 24.11.2026 | Vorabversion: Ernährungstagebuch mit Rezepten (1.4.6 nie veröffentlicht, hier enthalten), Eigengewicht mit Zusatz/Bändern, Prognose, Trainingsdauer, Tabs anordnen/ausblenden |
 | 1.5.1 | 24.11.2026 | Kacheltext in „Hinzufügen“, Gewicht im Profil-Dialog änderbar |
 | 1.5.2 | 24.11.2026 | Vorschau-Änderungen: Prognose im Feld (grün/rot), Bänder direkt in der Übung mit Spanne lb/kg, Stoppuhr ohne Statuszeile, Neuigkeiten-Pop-up statt Einführung |
-| 1.5.3 | 25.11.2026 | Bedarf & Trend (adaptiver Bedarf, Stufe 3), Mengen in TL/EL/Stück (Tagebuch, Rezept-Zutaten, eigene Lebensmittel), Grundliste über 200 Einträge mit TL/EL, Neuigkeiten-Pop-up besser lesbar; auf dem Pixel noch nicht bestätigt |
+| 1.5.3 | 25.11.2026 | Bedarf & Trend (adaptiver Bedarf, Stufe 3), Mengen in TL/EL/Stück (Tagebuch, Rezept-Zutaten, eigene Lebensmittel), Grundliste über 200 Einträge mit TL/EL, Neuigkeiten-Pop-up besser lesbar; auf dem Pixel installiert, Darstellungsfehler gemeldet → 1.5.4 |
+| 1.5.4 | 25.11.2026 | Bugfix: Bottom-Sheets ganz geöffnet + scrollbar, Einheiten-Auswahl, Wochenbalken-Beschriftung, Makro-Punktfarben; auf dem Pixel noch nicht bestätigt |
 
 Offen: nichts Geplantes. Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.

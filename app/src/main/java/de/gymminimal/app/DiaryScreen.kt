@@ -455,9 +455,12 @@ private fun PortionSheet(
     }
     val step = when (amountUnit) { "g" -> if (ml) 50.0 else 10.0; "Stück" -> 1.0; else -> 0.5 }
 
+    // Ganz geöffnet und scrollbar, damit der Button auch bei großer Schrift erreichbar bleibt.
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBackground,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
-        Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 18.dp, end = 18.dp, bottom = 22.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
                     Text(title, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.3).sp)
@@ -567,15 +570,16 @@ private fun UnitSelector(selected: String, baseUnit: String, food: Food?, onSele
         horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         amountUnits(food).forEach { u ->
             val active = u == selected
-            Column(Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(18.dp))
+            Column(Modifier.weight(1f).heightIn(min = 52.dp).clip(RoundedCornerShape(18.dp))
                 .background(if (active) scheme.primary else Color.Transparent).clickable { onSelect(u) },
+                .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 val color = if (active) scheme.onPrimary else scheme.onSurface
-                Text(if (u == "g") baseUnit else u, fontSize = 14.sp, color = color,
+                Text(if (u == "g") baseUnit else u, fontSize = 14.sp, color = color, lineHeight = 16.sp,
                     fontWeight = if (active) FontWeight.ExtraBold else FontWeight.SemiBold)
                 Text(if (u == "g") (if (baseUnit == "ml") "Milliliter" else "Gramm") else "${formatGrams(gramsPerUnit(food, u))} $baseUnit",
-                    maxLines = 1,
-                    fontSize = 10.sp, color = color.copy(alpha = .8f))
+                    maxLines = 1, lineHeight = 13.sp,
+                    fontSize = 11.sp, color = color.copy(alpha = .85f))
             }
         }
     }
