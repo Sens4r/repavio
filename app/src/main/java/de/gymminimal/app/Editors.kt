@@ -18,6 +18,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -102,8 +104,11 @@ fun ExerciseEditor(
     existing: Exercise?, defaultGroup: String, suggestions: List<String>,
     muscleOptions: List<String>,
     openNewAlternative: Boolean = false,
-    onDismiss: () -> Unit, onSave: (Exercise) -> Unit, onDelete: (() -> Unit)?
+    initialNote: String = "",
+    onDismiss: () -> Unit, onSave: (Exercise) -> Unit, onDelete: (() -> Unit)?,
+    onNote: (name: String, note: String) -> Unit = { _, _ -> }
 ) {
+    var note by remember(existing?.id) { mutableStateOf(initialNote) }
     var name by remember(existing?.id) { mutableStateOf(existing?.name ?: "") }
     var weight by remember(existing?.id) { mutableStateOf(existing?.weight ?: "0") }
     var reps by remember(existing?.id) { mutableStateOf(existing?.reps ?: "10") }
@@ -188,6 +193,19 @@ fun ExerciseEditor(
                     EditorText(sets, { sets = it.filter(Char::isDigit) }, "Sätze", Modifier.weight(1f), true)
                     EditorText(rest, { rest = it.filter(Char::isDigit) }, "Pause (Sek.)", Modifier.weight(1f), true)
                 }
+                OutlinedTextField(note, onValueChange = { note = it.replace('\n', ' ').take(NOTE_MAX) },
+                    label = { Text("Notiz (optional)") }, placeholder = { Text("z. B. Sitz 4, enger Griff") },
+                    modifier = Modifier.fillMaxWidth(), maxLines = 3)
+                Text("Erscheint in der Kachel. Gilt für die Übung mit diesem Namen – auch an anderen Tagen und in späteren Phasen.",
+                    fontSize = 11.5.sp, color = SubtleText, lineHeight = 16.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("Sitz", "Lehne", "Griff", "Stufe").forEach { chip ->
+                        Text("+ $chip", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(FieldBackground)
+                                .clickable { note = ((if (note.isBlank()) "" else note.trimEnd() + " · ") + "$chip ").take(NOTE_MAX) }
+                                .padding(horizontal = 12.dp, vertical = 6.dp))
+                    }
+                }
                 HorizontalDivider(color = FieldBackground)
                 SectionEyebrow("Alternativübungen – nur als Ersatz")
                 alts.forEach { alt -> key(alt.id) {
@@ -241,7 +259,7 @@ fun ExerciseEditor(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (onDelete != null) {
-                        IconButton(onClick = { askDelete = true }) {
+                        IconButton(onClick = { onDelete() }) {
                             Icon(Icons.Outlined.DeleteOutline, "Übung entfernen", tint = SubtleText)
                         }
                     }
@@ -249,6 +267,7 @@ fun ExerciseEditor(
                     TextButton(onClick = onDismiss) { Text("Abbrechen") }
                     Spacer(Modifier.width(6.dp))
                     Button(enabled = valid, shape = RoundedCornerShape(10.dp), onClick = {
+                        onNote(name.trim(), note)
                         onSave(Exercise(id = existing?.id ?: makeId(), name = name.trim(),
                             weight = weight, reps = reps, sets = sets.toInt(), rest = rest.toInt(),
                             alternatives = alts, muscleGroup = group, bodyweight = bodyweight))
@@ -411,7 +430,7 @@ private val PHASE_TYPES = listOf(
 @Composable
 fun PhaseDialog(
     app: AppData, onDismiss: () -> Unit,
-    onUpdate: (Phase, Set<Int>) -> Unit, onNew: (Phase, Set<Int>) -> Unit,
+    onUpdate: (Phase, Set<Int>) -> Unit, onNew: (Phase, Set<Int>, List<CarryOver>) -> Unit,
     startWithNew: Boolean = false
 ) {
     var name by remember { mutableStateOf(if (startWithNew) { if (app.phase.isConfigured && !app.phase.openEnded) "Muskelausdauer" else "" } else app.phase.name) }
@@ -421,6 +440,13 @@ fun PhaseDialog(
     var days by remember { mutableStateOf(selectedDays(app.plans)) }
     val parsedWeeks = weeks.toIntOrNull()
     val openEnded = name == NO_PHASE_NAME
+    // Übungen der bisherigen Phase mit Startgewichten aus dem geschätzten 1RM übernehmen.
+    var carryOn by remember { mutableStateOf(true) }
+    var excluded by remember { mutableStateOf(emptySet<String>()) }
+    val carryAvailable = newPhase && !openEnded && app.plans.any { it.day in days && it.exercises.isNotEmpty() }
+    val suggestions = remember(name, days, app.history, app.plans) {
+        if (carryAvailable) carryOverSuggestions(app, name, days) else emptyList()
+    }
     // Switching between ILB and "Keine Phase" always starts a new period; editing keeps the kind.
     val typeChoices = when {
         newPhase -> PHASE_TYPES.map { it.first } + NO_PHASE_NAME
@@ -492,7 +518,13 @@ fun PhaseDialog(
                         Text("Neue Phase beginnen")
                     }
                 } else {
-                    Text("Die Muskelgruppen und Trainingstage bleiben erhalten. Die Übungskacheln werden geleert. Alte Trainingsleistungen bleiben gespeichert.",
+                    if (carryAvailable && suggestions.isNotEmpty()) {
+                        CarryOverSection(name, suggestions, carryOn, excluded,
+                            onToggle = { carryOn = it },
+                            onExclude = { id -> excluded = if (id in excluded) excluded - id else excluded + id })
+                    }
+                    Text(if (carryAvailable && carryOn) "Muskelgruppen und Trainingstage bleiben erhalten. Nicht übernommene Übungen werden entfernt. Alte Trainingsleistungen bleiben gespeichert."
+                        else "Die Muskelgruppen und Trainingstage bleiben erhalten. Die Übungskacheln werden geleert. Alte Trainingsleistungen bleiben gespeichert.",
                         fontSize = 12.sp, color = SubtleText)
                     TextButton(onClick = {
                         newPhase = false
@@ -509,7 +541,8 @@ fun PhaseDialog(
                 val phase = if (newPhase)
                     Phase(name = name, weeks = weekCount, unitsPerWeek = days.size, openEnded = openEnded)
                 else app.phase.copy(name = name, weeks = weekCount, unitsPerWeek = days.size)
-                if (newPhase) onNew(phase, days) else onUpdate(phase, days)
+                val carry = if (carryAvailable && carryOn) suggestions.filter { it.exercise.id !in excluded } else emptyList()
+                if (newPhase) onNew(phase, days, carry) else onUpdate(phase, days)
             }) { Text(if (newPhase) "Phase starten" else "Speichern") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } }
@@ -599,3 +632,52 @@ private fun SummaryValue(title: String, value: String, modifier: Modifier = Modi
         Text(value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
+
+
+@Composable
+private fun CarryOverSection(phaseName: String, items: List<CarryOver>, on: Boolean, excluded: Set<String>,
+                             onToggle: (Boolean) -> Unit, onExclude: (String) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(FieldBackground.copy(alpha = .5f))
+        .padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Übungen übernehmen", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                Text(PHASE_REP_RANGE[phaseName]?.let { "Startgewichte aus deinem geschätzten 1RM für $it Wdh." }
+                    ?: "Mit den zuletzt trainierten Werten", fontSize = 12.sp, color = SubtleText, lineHeight = 16.sp)
+            }
+            Switch(checked = on, onCheckedChange = onToggle)
+        }
+        if (on) {
+            items.groupBy { it.day }.forEach { (day, list) ->
+                Text(WEEKDAY_LONG[day].uppercase(java.util.Locale.GERMANY), fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp, color = SubtleText, modifier = Modifier.padding(top = 4.dp))
+                list.forEach { c ->
+                    val keep = c.exercise.id !in excluded
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onExclude(c.exercise.id) },
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = keep, onCheckedChange = { onExclude(c.exercise.id) })
+                        Column(Modifier.weight(1f).alpha(if (keep) 1f else .45f)) {
+                            Text(c.exercise.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                            Text(when {
+                                c.bodyweight -> "Eigengewicht · Wdh. wie zuletzt"
+                                c.lastWeight != null && c.lastReps != null ->
+                                    "zuletzt ${carryNum(c.lastWeight)} kg × ${c.lastReps}" + (c.oneRm?.let { " · 1RM ≈ ${carryNum(Math.round(it).toDouble())} kg" } ?: "")
+                                else -> "noch nicht trainiert"
+                            }, fontSize = 11.5.sp, color = SubtleText)
+                        }
+                        Text(if (c.bodyweight) "EK × ${c.reps}" else "${carryNum(c.weight.toDoubleOrNull() ?: 0.0)} kg × ${c.reps}",
+                            fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = if (keep) scheme.onSurface else SubtleText,
+                            modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(FieldBackground)
+                                .padding(horizontal = 8.dp, vertical = 6.dp))
+                    }
+                }
+            }
+            Text("Auf 2,5 kg abgerundet (unter 20 kg auf 1 kg). Danach wie gewohnt in der Kachel anpassbar.",
+                fontSize = 11.sp, color = SubtleText, lineHeight = 15.sp)
+        }
+    }
+}
+
+private fun carryNum(v: Double): String =
+    String.format(java.util.Locale.GERMANY, if (v % 1.0 == 0.0) "%.0f" else "%.1f", v)

@@ -37,6 +37,10 @@ fun SettingsScreen(
     onNewsEnabled: (Boolean) -> Unit = {},
     weighConfig: WeighConfig = WeighConfig(),
     onWeighConfig: (WeighConfig) -> Unit = {},
+    pureBlack: Boolean = false,
+    onPureBlack: (Boolean) -> Unit = {},
+    summaryEnabled: Boolean = true,
+    onSummaryEnabled: (Boolean) -> Unit = {},
     onExport: () -> Unit,
     onImport: () -> Unit,
     onChooseFolder: () -> Unit,
@@ -58,7 +62,10 @@ fun SettingsScreen(
     var backups by remember { mutableStateOf(backup.recentFiles()) }
     var showLocal by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    var soundEnabled by remember { mutableStateOf(sounds.enabled()) }
+    var feedbackMode by remember { mutableStateOf(sounds.mode()) }
+    var vibStrength by remember { mutableStateOf(sounds.strength()) }
+    val undo = LocalUndo.current
+    val latestProfile by rememberUpdatedState(profile)
     var section by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val appVersion = remember { runCatching { RepavioUpdates.installedVersion(context) }.getOrDefault("?") }
@@ -81,15 +88,16 @@ fun SettingsScreen(
         addWeight(profile, kg, System.currentTimeMillis())?.let(onProfileChange)
         weightDialog = false
     }, onDismiss = { weightDialog = false })
-    deleteWeight?.let { entry ->
-        AlertDialog(onDismissRequest = { deleteWeight = null }, containerColor = CardBackground,
-            shape = RoundedCornerShape(28.dp),
-            title = { Text("Eintrag löschen?", fontWeight = FontWeight.ExtraBold) },
-            text = { Text("Der Gewichtseintrag wird aus dem Verlauf entfernt.", color = SubtleText) },
-            confirmButton = { TextButton(onClick = {
-                onProfileChange(deleteWeight(profile, entry.timestamp)); deleteWeight = null
-            }) { Text("Löschen", color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = { deleteWeight = null }) { Text("Abbrechen") } })
+    // Rückgängig statt Nachfrage: sofort löschen, kurz „Rückgängig“ anbieten.
+    LaunchedEffect(deleteWeight) {
+        val entry = deleteWeight ?: return@LaunchedEffect
+        onProfileChange(deleteWeight(profile, entry.timestamp))
+        deleteWeight = null
+        undo?.offer("Gewichtseintrag gelöscht") {
+            val p = latestProfile
+            if (p.weights.none { it.timestamp == entry.timestamp })
+                onProfileChange(p.copy(weights = (p.weights + entry).sortedBy { it.timestamp }))
+        }
     }
     if (passwordDialog) BackupPasswordDialog(backupPasswordSet, passwordBusy,
         onSet = onSetBackupPassword,
@@ -100,8 +108,8 @@ fun SettingsScreen(
         val rows = listOf(
             Triple("backup", Icons.Outlined.Backup, "Backup" to "${backups.size} lokale Sicherungen" +
                 if (backupPasswordSet) " · Profil verschlüsselt" else ""),
-            Triple("bedienung", Icons.Outlined.TouchApp, "Bedienung" to (if (soundEnabled) "Wisch-Sound an" else "Wisch-Sound aus") +
-                " · Tabs"),
+            Triple("bedienung", Icons.Outlined.TouchApp, "Bedienung" to "Wischen: " +
+                (SWIPE_FEEDBACK.firstOrNull { it.first == feedbackMode }?.second ?: "Ton") + " · Tabs · Pop-ups"),
             Triple("app", Icons.Outlined.SystemUpdate, "App & Updates" to "Version $appVersion"),
             Triple("reset", Icons.Outlined.DeleteForever, "Zurücksetzen" to "Alle Daten auf dem Gerät löschen")
         )
@@ -219,21 +227,14 @@ fun SettingsScreen(
                     }
                 }
                 item {
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                    .background(CardBackground).padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.VolumeUp, null, modifier = Modifier.size(22.dp), tint = SubtleText)
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Wisch-Sound", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        Text("Nur bei Gewicht und Wiederholungen", fontSize = 12.sp, color = SubtleText)
-                    }
-                    Switch(checked = soundEnabled, onCheckedChange = {
-                        soundEnabled = it
-                        sounds.setEnabled(it)
-                    })
+                    SwipeFeedbackCard(feedbackMode, vibStrength,
+                        onMode = { feedbackMode = it; sounds.setMode(it) },
+                        onStrength = { vibStrength = it; sounds.setStrength(it) })
                 }
-                }
+                item { SwitchRow(Icons.Outlined.Contrast, "Reines Schwarz", "Hintergrund #000 für OLED-Displays, Karten bleiben grau",
+                    pureBlack, onPureBlack) }
+                item { SwitchRow(Icons.Outlined.EmojiEvents, "Bilanz nach dem Training", "Kurzes Pop-up nach „Training beenden“",
+                    summaryEnabled, onSummaryEnabled) }
             }
             "app" -> {
                 item {
@@ -293,6 +294,74 @@ private fun TabsCard(config: TabConfig, onChange: (TabConfig) -> Unit) {
                 Switch(checked = tab !in config.hidden, enabled = tab != TAB_PROFILE,
                     onCheckedChange = { onChange(toggleTab(config, tab)) })
             }
+        }
+    }
+}
+
+
+@Composable
+private fun SwitchRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, detail: String,
+                      checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(CardBackground)
+        .padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, modifier = Modifier.size(22.dp), tint = SubtleText)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(detail, fontSize = 12.sp, color = SubtleText)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+/** Rückmeldung beim Wischen: Ton, Vibration, beides oder aus; bei Vibration die Stärke. */
+@Composable
+private fun SwipeFeedbackCard(mode: String, strength: String, onMode: (String) -> Unit, onStrength: (String) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val view = androidx.compose.ui.platform.LocalView.current
+    val sounds = LocalRepavioSounds.current
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(CardBackground)
+        .padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Vibration, null, modifier = Modifier.size(22.dp), tint = SubtleText)
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text("Rückmeldung beim Wischen", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("Gewicht und Wiederholungen · pro Stufe", fontSize = 12.sp, color = SubtleText)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            SWIPE_FEEDBACK.forEach { (key, label) ->
+                val on = mode == key
+                val icon = when (key) {
+                    "sound" -> Icons.Outlined.VolumeUp
+                    "vib" -> Icons.Outlined.Vibration
+                    "both" -> Icons.Outlined.SurroundSound
+                    else -> Icons.Outlined.VolumeOff
+                }
+                Column(Modifier.weight(1f).heightIn(min = 56.dp).clip(RoundedCornerShape(14.dp))
+                    .background(if (on) scheme.primary else FieldBackground)
+                    .clickable(onClickLabel = label) { onMode(key); sounds?.tick(view) }
+                    .padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
+                    Icon(icon, null, tint = if (on) scheme.onPrimary else scheme.onSurface, modifier = Modifier.size(18.dp))
+                    Text(label, fontSize = 12.sp, fontWeight = if (on) FontWeight.ExtraBold else FontWeight.SemiBold,
+                        color = if (on) scheme.onPrimary else scheme.onSurface, maxLines = 1)
+                }
+            }
+        }
+        if (mode == "vib" || mode == "both") {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Stärke", fontSize = 13.sp, color = SubtleText, modifier = Modifier.weight(1f))
+                VIBRATION_STRENGTHS.forEach { s ->
+                    val on = strength == s
+                    Text(s, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = if (on) scheme.onPrimary else scheme.onSurface,
+                        modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(if (on) scheme.primary else FieldBackground)
+                            .clickable { onStrength(s); sounds?.tick(view) }.padding(horizontal = 12.dp, vertical = 7.dp))
+                }
+            }
+            Text("Kurzer Tick bei jeder Stufe, etwas kräftiger bei vollen 10 kg. Folgt der Android-Einstellung „Vibration bei Berührung“.",
+                fontSize = 11.5.sp, color = SubtleText, lineHeight = 16.sp)
         }
     }
 }

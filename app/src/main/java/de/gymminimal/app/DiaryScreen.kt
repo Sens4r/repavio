@@ -13,6 +13,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Edit
@@ -101,6 +103,22 @@ private fun DiaryPage(
     val need = target?.result
     val total = dayTotals(log, day)
     var editing by remember { mutableStateOf<DiaryEntry?>(null) }
+    var copySheet by remember { mutableStateOf(false) }
+    var dayMenu by remember { mutableStateOf(false) }
+    val undo = LocalUndo.current
+    val latestLog by rememberUpdatedState(log)
+    // Übernimmt Mahlzeiten eines anderen Tages; Rückgängig entfernt genau die neuen Einträge.
+    fun copyFrom(from: String, meals: Set<Int>, water: Boolean, label: String) {
+        val ids = mutableListOf<String>()
+        val before = log.water[day] ?: 0
+        val next = copyDay(log, from, day, meals, water) { newId("e").also(ids::add) }
+        val addedWater = (next.water[day] ?: 0) - before
+        onLog(next)
+        undo?.offer(label) {
+            val l = latestLog
+            onLog(addWater(l.copy(entries = l.entries.filterNot { it.id in ids }), day, -addedWater))
+        }
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
         .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
@@ -116,6 +134,46 @@ private fun DiaryPage(
                 fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
             IconButton(onClick = { onDay(-1) }, enabled = date < today) {
                 Icon(Icons.Outlined.ChevronRight, "Nächster Tag", tint = if (date < today) SubtleText else Color.Transparent)
+            }
+            Box {
+                IconButton(onClick = { dayMenu = true }) { Icon(Icons.Outlined.MoreVert, "Tag-Menü", tint = SubtleText) }
+                DropdownMenu(expanded = dayMenu, onDismissRequest = { dayMenu = false }, containerColor = CardBackground) {
+                    DropdownMenuItem(text = { Text("Tag übernehmen …") }, leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
+                        onClick = { dayMenu = false; copySheet = true })
+                }
+            }
+        }
+
+        // Leerer Tag: Vorschlag, den Vortag zu übernehmen.
+        val previous = dayKey(date.minusDays(1))
+        val previousEntries = dayEntries(log, previous)
+        if (dayEntries(log, day).isEmpty() && previousEntries.isNotEmpty()) {
+            val prevTotal = dayTotals(log, previous)
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(CardBackground).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(FieldBackground), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.ContentCopy, null, tint = scheme.primary, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(if (date == today) "Wie gestern?" else "Wie am Vortag?", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                        val meals = previousEntries.map { it.meal }.distinct().size
+                        Text("${date.minusDays(1).format(DateTimeFormatter.ofPattern("EE", Locale.GERMANY))} · $meals ${if (meals == 1) "Mahlzeit" else "Mahlzeiten"} · " +
+                            "${kcalText(prevTotal.kcal)} kcal · ${prevTotal.protein.roundToInt()} g Protein",
+                            fontSize = 12.5.sp, color = SubtleText)
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(onClick = { copySheet = true }, modifier = Modifier.weight(1f).heightIn(min = 46.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = FieldBackground, contentColor = scheme.onSurface)) {
+                        Text("Anderer Tag …", fontWeight = FontWeight.Bold, maxLines = 1)
+                    }
+                    Button(onClick = { copyFrom(previous, MEALS.indices.toSet(), true, "Vortag übernommen") },
+                        modifier = Modifier.weight(1.3f).heightIn(min = 46.dp)) {
+                        Text("Übernehmen", fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                    }
+                }
             }
         }
 
@@ -222,6 +280,10 @@ private fun DiaryPage(
             fontSize = 11.sp, color = SubtleText, lineHeight = 16.sp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 
+    if (copySheet) CopyDaySheet(log, date, onDismiss = { copySheet = false }) { from, meals, water ->
+        copySheet = false
+        copyFrom(from, meals, water, "Einträge übernommen")
+    }
     editing?.let { entry ->
         val food = foodById(log, entry.foodId)
         PortionSheet(
@@ -232,7 +294,13 @@ private fun DiaryPage(
                 if (updated != null) onLog(replaceEntry(log, updated))
                 editing = null
             },
-            onRemove = { onLog(removeEntry(log, entry.id)); editing = null },
+            onRemove = {
+                onLog(removeEntry(log, entry.id)); editing = null
+                undo?.offer("„${entry.name}“ entfernt") {
+                    val l = latestLog
+                    if (l.entries.none { it.id == entry.id }) onLog(l.copy(entries = l.entries + entry))
+                }
+            },
             onFavorite = { food?.let { onLog(toggleFavorite(log, it.id)) } }
         )
     }
@@ -270,6 +338,8 @@ private fun SmallRound(label: String, icon: androidx.compose.ui.graphics.vector.
 @Composable
 private fun AddFoodScreen(log: FoodLog, day: String, meal: Int, onLog: (FoodLog) -> Unit, onClose: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
+    val undo = LocalUndo.current
+    val latestLog by rememberUpdatedState(log)
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableIntStateOf(0) }
     var picked by remember { mutableStateOf<Food?>(null) }
@@ -295,7 +365,16 @@ private fun AddFoodScreen(log: FoodLog, day: String, meal: Int, onLog: (FoodLog)
         RecipeEditor(recipe, log, isNew = log.recipes.none { it.id == recipe.id },
             onClose = { recipeEditor = null },
             onSave = { r -> onLog(upsertRecipe(log, r)); recipeEditor = null; filter = 4 },
-            onDelete = { id -> onLog(deleteRecipe(log, id)); recipeEditor = null })
+            onDelete = { id ->
+                val removed = log.recipes.firstOrNull { it.id == id }
+                val wasFav = id in log.favorites
+                onLog(deleteRecipe(log, id)); recipeEditor = null
+                if (removed != null) undo?.offer("Rezept „${removed.name}“ gelöscht") {
+                    val l = latestLog
+                    if (l.recipes.none { it.id == id }) onLog(l.copy(recipes = l.recipes + removed,
+                        favorites = if (wasFav) l.favorites + id else l.favorites))
+                }
+            })
         return
     }
 
@@ -388,7 +467,16 @@ private fun AddFoodScreen(log: FoodLog, day: String, meal: Int, onLog: (FoodLog)
     if (newCustom || customEditor != null) {
         CustomFoodDialog(customEditor, onDismiss = { newCustom = false; customEditor = null },
             onSave = { food -> onLog(upsertCustomFood(log, food)); newCustom = false; customEditor = null; picked = food },
-            onDelete = { id -> onLog(deleteCustomFood(log, id)); customEditor = null })
+            onDelete = { id ->
+                val removed = log.customFoods.firstOrNull { it.id == id }
+                val wasFav = id in log.favorites
+                onLog(deleteCustomFood(log, id)); customEditor = null
+                if (removed != null) undo?.offer("„${removed.name}“ gelöscht") {
+                    val l = latestLog
+                    if (l.customFoods.none { it.id == id }) onLog(l.copy(customFoods = l.customFoods + removed,
+                        favorites = if (wasFav) l.favorites + id else l.favorites))
+                }
+            })
     }
 }
 
@@ -722,7 +810,7 @@ private fun CustomFoodDialog(existing: Food?, onDismiss: () -> Unit, onSave: (Fo
                         fontSize = 12.sp, color = scheme.error)
                 }
                 if (existing != null) {
-                    TextButton(onClick = { confirmDelete = true }) {
+                    TextButton(onClick = { onDelete(existing.id) }) {
                         Text("Lebensmittel löschen", color = scheme.error, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -831,7 +919,7 @@ private fun RecipeEditor(
                 modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(28.dp)) {
                 Text("Rezept speichern", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
             }
-            if (!isNew) TextButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
+            if (!isNew) TextButton(onClick = { onDelete(initial.id) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Rezept löschen", color = scheme.error, fontWeight = FontWeight.Bold)
             }
         }
@@ -891,4 +979,83 @@ private fun AmountDialog(title: String, initial: Double, unit: String, food: Foo
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } })
+}
+
+
+// ---------------------------------------------------------------- Tag übernehmen
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CopyDaySheet(log: FoodLog, target: LocalDate, onDismiss: () -> Unit,
+                         onCopy: (from: String, meals: Set<Int>, water: Boolean) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val days = remember(log, target) {
+        (1L..30L).map { target.minusDays(it) }.filter { dayEntries(log, dayKey(it)).isNotEmpty() }.take(10)
+    }
+    var from by remember { mutableStateOf(days.firstOrNull()) }
+    var off by remember(from) { mutableStateOf(emptySet<Int>()) }
+    var water by remember { mutableStateOf(true) }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBackground,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column {
+                Text("Tag übernehmen", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+                Text("nach ${target.format(DateTimeFormatter.ofPattern("EE, dd.MM.", Locale.GERMANY))}", fontSize = 12.5.sp, color = SubtleText)
+            }
+            if (days.isEmpty()) {
+                Text("In den letzten 30 Tagen gibt es keine Einträge.", fontSize = 14.sp, color = SubtleText)
+                return@Column
+            }
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                days.forEach { d ->
+                    val on = d == from
+                    Column(Modifier.clip(RoundedCornerShape(16.dp)).background(if (on) scheme.primary else FieldBackground)
+                        .clickable { from = d }.padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(if (d == target.minusDays(1)) "Vortag" else d.format(DateTimeFormatter.ofPattern("EE dd.MM.", Locale.GERMANY)),
+                            fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = if (on) scheme.onPrimary else scheme.onSurface)
+                        Text("${kcalText(dayTotals(log, dayKey(d)).kcal)} kcal", fontSize = 11.sp,
+                            color = if (on) scheme.onPrimary.copy(alpha = .8f) else SubtleText)
+                    }
+                }
+            }
+            val source = from?.let { dayKey(it) } ?: return@Column
+            Text("MAHLZEITEN", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = SubtleText)
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(FieldBackground).padding(horizontal = 4.dp)) {
+                MEALS.forEachIndexed { meal, name ->
+                    val items = dayEntries(log, source).filter { it.meal == meal }
+                    if (items.isEmpty()) return@forEachIndexed
+                    val keep = meal !in off
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .clickable { off = if (keep) off + meal else off - meal }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = keep, onCheckedChange = { off = if (keep) off + meal else off - meal })
+                        Column(Modifier.weight(1f)) {
+                            Text(name, fontSize = 14.5.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(items.joinToString(" · ") { it.name }, fontSize = 12.sp, color = SubtleText,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text("${kcalText(items.sumOf { it.values.kcal })} kcal", fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            color = SubtleText, modifier = Modifier.padding(start = 8.dp, end = 10.dp))
+                    }
+                }
+            }
+            val ml = log.water[source] ?: 0
+            if (ml > 0) Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Wasser mit übernehmen (${liters(ml)} L)", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                Switch(checked = water, onCheckedChange = { water = it })
+            }
+            Text("Einträge kommen zu diesem Tag dazu, vorhandene bleiben. Danach sind sie unabhängig von der Vorlage.",
+                fontSize = 11.5.sp, color = SubtleText, lineHeight = 16.sp)
+            val chosen = MEALS.indices.filter { it !in off && dayEntries(log, source).any { e -> e.meal == it } }.toSet()
+            val kcal = dayEntries(log, source).filter { it.meal in chosen }.sumOf { it.values.kcal }
+            Button(onClick = { onCopy(source, chosen, water && ml > 0) }, enabled = chosen.isNotEmpty() || (water && ml > 0),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(26.dp)) {
+                Text(if (chosen.isEmpty()) "Nur Wasser übernehmen"
+                    else "${chosen.size} ${if (chosen.size == 1) "Mahlzeit" else "Mahlzeiten"} übernehmen · ${kcalText(kcal)} kcal",
+                    fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+            }
+        }
+    }
 }

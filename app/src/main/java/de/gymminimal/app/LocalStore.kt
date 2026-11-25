@@ -55,6 +55,10 @@ class LocalStore(private val context: Context) {
 
     private fun JSONObject.optBoolNull(key: String): Boolean? = if (has(key) && !isNull(key)) optBoolean(key) else null
     private fun JSONObject.optFinite(key: String): Double = optDouble(key, 0.0).takeIf { it.isFinite() && it >= 0 } ?: 0.0
+    fun pureBlack(): Boolean = prefs.getBoolean("pure_black", false)
+    fun setPureBlack(value: Boolean) { prefs.edit().putBoolean("pure_black", value).apply() }
+    fun summaryDisabled(): Boolean = prefs.getBoolean("summary_disabled", false)
+    fun setSummaryDisabled(value: Boolean) { prefs.edit().putBoolean("summary_disabled", value).apply() }
     fun loadWeighConfig(): WeighConfig = decodeWeighConfig(prefs.getString("weigh_config", null))
     fun saveWeighConfig(config: WeighConfig) { prefs.edit().putString("weigh_config", encodeWeighConfig(config)).apply() }
     fun weighSnoozed(): java.time.LocalDate? =
@@ -144,6 +148,7 @@ class LocalStore(private val context: Context) {
                 put("min", b.min); put("max", b.max); put("unit", b.unit)
             }) }
         })
+        put("notes", JSONObject().apply { data.notes.forEach { (k, v) -> put(k, v) } })
         put("choices", JSONObject().apply {
             data.choices.forEach { (key, c) -> put(key, JSONObject().apply {
                 put("status", c.status); put("alternativeId", c.alternativeId)
@@ -238,7 +243,12 @@ class LocalStore(private val context: Context) {
         val catalog = root.optJSONArray("exerciseCatalog")?.collectItems { definition ->
             ExerciseDefinition(definition.getString("id"), definition.getString("name"))
         } ?: emptyList()
+        val notes = root.optJSONObject("notes")?.let { obj ->
+            obj.keys().asSequence().take(500).mapNotNull { k ->
+                obj.optString(k).trim().take(NOTE_MAX).takeIf { it.isNotEmpty() }?.let { k to it }
+            }.toMap()
+        } ?: emptyMap()
         return migrateExerciseIdentities(AppData(phase, plans, history, choices, drafts, pastPhases,
-            alphabeticTags(customTags + referenced.filterNot { it in customTags }), catalog, bands))
+            alphabeticTags(customTags + referenced.filterNot { it in customTags }), catalog, bands, notes))
     }
 }

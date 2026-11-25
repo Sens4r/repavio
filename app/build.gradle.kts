@@ -9,8 +9,8 @@ android {
         applicationId = "de.gymminimal.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 33
-        versionName = "1.6.0"
+        versionCode = 34
+        versionName = "1.6.1"
     }
     // Signing credentials are injected by GitHub Actions from encrypted Secrets.
     // Debug builds and pull-request validation require no signing Secrets.

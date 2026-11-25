@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MinimalTheme(content: @Composable () -> Unit) {
+fun MinimalTheme(black: Boolean = false, content: @Composable () -> Unit) {
     val context = LocalContext.current
     // Material You follows the user's wallpaper/system palette, but surfaces stay neutral.
     val dynamic = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -75,7 +75,7 @@ fun MinimalTheme(content: @Composable () -> Unit) {
         darkColorScheme(primary = Color(0xFFAFC9B5))
     }
     val colors = dynamic.copy(
-        background = ScreenBackground,
+        background = if (black) Color.Black else ScreenBackground,
         surface = CardBackground,
         onBackground = Color(0xFFF3F4F5),
         onSurface = Color(0xFFF3F4F5),
@@ -146,6 +146,11 @@ fun RepavioApp() {
     var restoreFailed by remember { mutableStateOf(false) }
     val updateProfile: (Profile) -> Unit = { next -> profile = next; profileStore.save(next) }
     var weighConfig by remember { mutableStateOf(store.loadWeighConfig()) }
+    var pureBlack by remember { mutableStateOf(store.pureBlack()) }
+    var summaryEnabled by remember { mutableStateOf(!store.summaryDisabled()) }
+    val snackbar = remember { SnackbarHostState() }
+    val undoScope = rememberCoroutineScope()
+    val undo = remember(snackbar) { UndoController(snackbar, undoScope) }
     // Einmal beim Start geprüft; erscheint erst, wenn keine anderen Pop-ups offen sind.
     var weighPrompt by remember { mutableStateOf(weighDue(weighConfig, profile.weights, java.time.LocalDate.now(), store.weighSnoozed())) }
     val scope = rememberCoroutineScope()
@@ -227,11 +232,17 @@ fun RepavioApp() {
         }
     }
 
-    MinimalTheme {
-        CompositionLocalProvider(LocalRepavioSounds provides sounds) {
+    MinimalTheme(black = pureBlack) {
+        CompositionLocalProvider(LocalRepavioSounds provides sounds, LocalUndo provides undo) {
         Box(Modifier.fillMaxSize()) {
         Scaffold(
-            containerColor = ScreenBackground,
+            containerColor = MaterialTheme.colorScheme.background,
+            snackbarHost = {
+                SnackbarHost(snackbar) { data ->
+                    Snackbar(data, shape = RoundedCornerShape(16.dp), containerColor = Color(0xFFE2E2E9),
+                        contentColor = Color(0xFF1B1D22), actionColor = MaterialTheme.colorScheme.inversePrimary)
+                }
+            },
             bottomBar = {
                 // Icons only. Hidden in the training fullscreen mode.
                 if (!(tab == TAB_TRAINING && trainingFocus)) {
@@ -242,7 +253,7 @@ fun RepavioApp() {
             Box(
                 Modifier.fillMaxSize()
                     .padding(inset)
-                    .background(ScreenBackground)
+                    .background(MaterialTheme.colorScheme.background)
             ) {
                 when (tab) {
                     0 -> TrainingScreen(app, update, focus = trainingFocus,
@@ -254,7 +265,9 @@ fun RepavioApp() {
                         },
                         onWorkoutSaved = { stopwatch.reset() },
                         bodyKg = profile.currentWeight,
-                        workoutDuration = { stopwatch.elapsed().takeIf { it > 0 } })
+                        workoutDuration = { stopwatch.elapsed().takeIf { it > 0 } },
+                        summaryEnabled = summaryEnabled,
+                        onSummaryDisabled = { summaryEnabled = false; store.setSummaryDisabled(true) })
                     1 -> AnalyzeScreen(app, update)
                     2 -> NutritionScreen(profile, foodLog, updateFoodLog, onGoal = { updateProfile(profile.copy(goal = it)) },
                         onOpenProfile = { tabState = 3 })
@@ -263,6 +276,10 @@ fun RepavioApp() {
                         newsEnabled = newsEnabled,
                         onNewsEnabled = { on -> newsEnabled = on; store.setNewsDisabled(!on) },
                         weighConfig = weighConfig,
+                        pureBlack = pureBlack,
+                        onPureBlack = { on -> pureBlack = on; store.setPureBlack(on) },
+                        summaryEnabled = summaryEnabled,
+                        onSummaryEnabled = { on -> summaryEnabled = on; store.setSummaryDisabled(!on) },
                         onWeighConfig = { next -> weighConfig = next; store.saveWeighConfig(next) },
                         onTabConfig = { next -> tabConfig = sanitizeTabs(next); store.saveTabs(tabConfig) },
                         onExport = { exportLauncher.launch("repavio_Backup.json") },
