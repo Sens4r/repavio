@@ -571,7 +571,7 @@ private fun UnitSelector(selected: String, baseUnit: String, food: Food?, onSele
         amountUnits(food).forEach { u ->
             val active = u == selected
             Column(Modifier.weight(1f).heightIn(min = 52.dp).clip(RoundedCornerShape(18.dp))
-                .background(if (active) scheme.primary else Color.Transparent).clickable { onSelect(u) },
+                .background(if (active) scheme.primary else Color.Transparent).clickable { onSelect(u) }
                 .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 val color = if (active) scheme.onPrimary else scheme.onSurface
