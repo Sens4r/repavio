@@ -41,4 +41,18 @@ class NewsTest {
         assertEquals(0, compareVersions("v1.5.2", "1.5.2"))
         assertTrue(RELEASE_NEWS.all { it.items.size in 1..6 })
     }
+
+    @Test fun correctionsNeverTriggerPopup() {
+        assertTrue(newsToShow("1.5.4", "1.5.3", true, false).isEmpty())
+        assertEquals(listOf("1.6.0"), newsToShow("1.6.0", "1.5.3", true, false).map { it.version })
+        assertEquals(listOf("1.6.0"), newsToShow("1.6.0", null, true, false).map { it.version })
+    }
+
+    @Test fun pagesStartWithNewThenOlderVersions() {
+        val pages = newsPages(newsToShow("1.6.0", "1.5.3", true, false), "1.6.0")
+        assertEquals("Neu in repavio", pages.first().title)
+        assertEquals("Version 1.5.4", pages[1].title)
+        assertTrue(pages[1].eyebrow.startsWith("KORREKTUREN"))
+        assertEquals("Version 1.4.4", pages.last().title)
+    }
 }

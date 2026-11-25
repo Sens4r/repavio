@@ -43,6 +43,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+private const val ALL_PHASES = "__alle_phasen__"
+
 private data class Point(val workoutId: String, val whenLogged: Long, val logged: LoggedExercise)
 
 @Composable
@@ -64,12 +66,14 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
         }
         return
     }
+    val allPhases = selectedPhaseId == ALL_PHASES
     val selectedPhase = phases.firstOrNull { it.id == selectedPhaseId } ?: phases.firstOrNull() ?: app.phase
-    val selectedIsCurrent = selectedPhase.id == app.phase.id && app.phase.isConfigured
+    val selectedIsCurrent = !allPhases && selectedPhase.id == app.phase.id && app.phase.isConfigured
+    val scopeName = if (allPhases) "Alle Phasen" else selectedPhase.name
 
     // Only real completed workouts are measured; gaps in the calendar are not samples.
-    val phaseWorkouts = remember(app.history, selectedPhase.id) {
-        app.history.filter { it.phaseId == selectedPhase.id }.sortedBy { it.timestamp }
+    val phaseWorkouts = remember(app.history, selectedPhase.id, allPhases) {
+        app.history.filter { allPhases || it.phaseId == selectedPhase.id }.sortedBy { it.timestamp }
     }
     val points = remember(phaseWorkouts) {
         phaseWorkouts.flatMap { work ->
@@ -77,7 +81,8 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
         }
     }
     val totalVolume = points.sumOf { it.logged.volume }
-    val groups = points.groupBy { it.logged.performedId }
+    // Über alle Phasen werden Übungen über den Namen zusammengeführt (neue Phasen haben neue Kachel-IDs).
+    val groups = points.groupBy { if (allPhases) "n:" + exerciseNameKey(it.logged.name) else it.logged.performedId }
     val selected = detailId?.let { groups[it] }
     val byMuscle = groups.entries.groupBy { it.value.last().logged.muscleGroup }
     val muscleEntries = selectedMuscle?.let { byMuscle[it] }
@@ -102,7 +107,7 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
             contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
-                ScreenHeader(latest.logged.name, "${latest.logged.muscleGroup} · ${selectedPhase.name}") { detailId = null }
+                ScreenHeader(latest.logged.name, "${latest.logged.muscleGroup} · $scopeName") { detailId = null }
             }
             item {
                 Row(Modifier.padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
@@ -186,7 +191,7 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
     if (selectedMuscle != null && !muscleEntries.isNullOrEmpty()) {
         val entries = muscleEntries.sortedBy { it.value.last().logged.name }
         Column(Modifier.fillMaxSize().padding(start = 8.dp, end = 16.dp, top = 12.dp)) {
-            ScreenHeader(selectedMuscle!!, selectedPhase.name) { selectedMuscle = null }
+            ScreenHeader(selectedMuscle!!, scopeName) { selectedMuscle = null }
             Spacer(Modifier.height(14.dp))
             LazyColumn(Modifier.padding(start = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 16.dp)) {
@@ -215,6 +220,7 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
     }
 
     val progress = remember(app.history, selectedPhase.id) { phaseProgress(app, selectedPhase.id) }
+    val overall = remember(app.history, app.pastPhases, allPhases) { if (allPhases) overallStats(app) else null }
     val muscles = alphabeticTags(MUSCLE_GROUPS + byMuscle.keys).filter { byMuscle[it]?.isNotEmpty() == true }
     LazyColumn(Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 16.dp),
@@ -225,15 +231,29 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
                     Row(Modifier.height(40.dp).clip(RoundedCornerShape(20.dp)).background(FieldBackground)
                         .clickable(onClickLabel = "Phase auswählen") { phaseDropdown = true }
                         .padding(start = 16.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(selectedPhase.name, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        Text(scopeName, fontSize = 13.sp, fontWeight = FontWeight.Bold,
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                        Text(" · ${phaseDateLabel(selectedPhase, selectedIsCurrent)}", fontSize = 13.sp,
+                        Text(" · " + if (allPhases) "seit ${overall?.since?.let(::formatMonth) ?: "–"}"
+                            else phaseDateLabel(selectedPhase, selectedIsCurrent), fontSize = 13.sp,
                             color = SubtleText, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false))
                         Icon(Icons.Outlined.ArrowDropDown, null, modifier = Modifier.size(20.dp))
                     }
                     DropdownMenu(expanded = phaseDropdown, onDismissRequest = { phaseDropdown = false },
                         containerColor = CardBackground) {
+                        if (phases.size > 1) DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text("Alle Phasen", fontSize = 13.sp)
+                                    Text("Gesamtentwicklung und Vergleich", fontSize = 10.sp, color = SubtleText)
+                                }
+                            },
+                            onClick = {
+                                selectedPhaseId = ALL_PHASES
+                                detailId = null
+                                selectedMuscle = null
+                                phaseDropdown = false
+                            })
                         phases.forEach { phase ->
                             DropdownMenuItem(
                                 text = {
@@ -253,7 +273,7 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
                         }
                     }
                 }
-                if (!selectedIsCurrent) {
+                if (!selectedIsCurrent && !allPhases) {
                     if (selectedPhase.name == "Frühere Phase (ältere Daten)") {
                         IconButton(onClick = { editingLegacy = true }) {
                             Icon(Icons.Outlined.Edit, "Alte Phase benennen", tint = SubtleText)
@@ -265,7 +285,29 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
                 }
             }
         }
-        item { Column {
+        if (overall != null) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StatisticCard("Einheiten", overall.workouts.toString(), Modifier.weight(1f))
+                        StatisticCard("Phasen", overall.phases.toString(), Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StatisticCard("Volumen", "${formatNumber(Math.round(overall.volume / 1000).toDouble())} t", Modifier.weight(1f))
+                        StatisticCard("Ø Dauer", overall.avgDurationMs?.let(::durationText) ?: "–", Modifier.weight(1f))
+                    }
+                }
+            }
+            item { OverallStrengthCard(overall, phases) }
+            if (overall.types.isNotEmpty()) {
+                item { SectionTitle("Phasen im Vergleich") }
+                item { PhaseTypesCard(overall.types) }
+            }
+            if (overall.best.isNotEmpty()) {
+                item { SectionTitle("Bestwerte") }
+                item { BestLiftsCard(overall.best) }
+            }
+        } else item { Column {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatisticCard("Einheiten", phaseWorkouts.size.toString(), Modifier.weight(1f))
                 StatisticCard("Volumen", "${formatNumber(totalVolume / 1000)} t", Modifier.weight(1f))
@@ -279,17 +321,14 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
                 }
             }
         } }
-        item { ProgressCard(progress) }
+        if (overall == null) item { ProgressCard(progress) }
         if (muscles.isEmpty()) {
             item {
-                Text("In dieser Phase wurden noch keine Trainingseinheiten abgeschlossen.",
+                Text(if (allPhases) "Noch keine Trainingseinheiten abgeschlossen." else "In dieser Phase wurden noch keine Trainingseinheiten abgeschlossen.",
                     color = SubtleText, fontSize = 13.sp)
             }
         } else {
-            item {
-                Text("Muskelgruppen", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = (-0.3).sp, modifier = Modifier.padding(start = 2.dp, top = 8.dp))
-            }
+            item { SectionTitle("Muskelgruppen") }
             items(muscles.chunked(2)) { pair ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     pair.forEach { muscle ->
@@ -304,6 +343,10 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
                                 Text(if (count == 1) "1 Übung" else "$count Übungen",
                                     fontSize = 12.sp, color = SubtleText)
                             }
+                            overall?.muscles?.firstOrNull { it.group == muscle }?.gain?.let { g ->
+                                Text(percentText(g), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 8.dp))
+                            }
                             Box(Modifier.size(32.dp).clip(RoundedCornerShape(16.dp)).background(FieldBackground),
                                 contentAlignment = Alignment.Center) {
                                 Icon(Icons.Outlined.ChevronRight, null, tint = SubtleText, modifier = Modifier.size(18.dp))
@@ -314,14 +357,19 @@ fun AnalyzeScreen(app: AppData, update: ((AppData) -> AppData) -> Unit) {
                 }
             }
         }
+        if (allPhases) item {
+            Text("Über alle Phasen wird mit dem geschätzten 1RM (Epley) verglichen, damit Phasen mit unterschiedlichen " +
+                "Wiederholungszahlen vergleichbar sind. Gleichnamige Übungen werden zusammengeführt. Pausen erzeugen keine Werte.",
+                color = SubtleText, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(horizontal = 4.dp))
+        }
     }
-    if (editingLegacy && !selectedIsCurrent) {
+    if (editingLegacy && !selectedIsCurrent && !allPhases) {
         LegacyPhaseDialog(onDismiss = { editingLegacy = false }, onSave = { name, date ->
             update { data -> nameLegacyPhase(data, selectedPhase.id, name, date) ?: data }
             editingLegacy = false
         })
     }
-    if (deleteConfirmation && !selectedIsCurrent) {
+    if (deleteConfirmation && !selectedIsCurrent && !allPhases) {
         AlertDialog(onDismissRequest = { deleteConfirmation = false },
             containerColor = CardBackground,
             title = { Text("Phase endgültig löschen?") },
@@ -517,3 +565,145 @@ private fun LegacyPhaseDialog(onDismiss: () -> Unit, onSave: (String, Long?) -> 
             onClick = { onSave(name, parsed) }) { Text("Speichern") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } })
 }
+
+
+private fun formatMonth(timestamp: Long): String =
+    Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+        .format(DateTimeFormatter.ofPattern("MM/yyyy", Locale.GERMANY))
+
+private fun percentText(value: Double): String = String.format(Locale.GERMANY, "%+.0f %%", value)
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.3).sp,
+        modifier = Modifier.padding(start = 2.dp, top = 8.dp))
+}
+
+/** Hintergrundstreifen je Phase: Muskelausdauer hell, Hypertrophie mittel, Muskelkraft kräftig. */
+private fun phaseAlpha(name: String?): Float = when (name) {
+    "Muskelausdauer" -> .06f
+    "Hypertrophie" -> .14f
+    "Muskelkraft" -> .26f
+    else -> .10f
+}
+
+@Composable
+private fun OverallStrengthCard(stats: OverallStats, phases: List<Phase>) {
+    val color = MaterialTheme.colorScheme.primary
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(CardBackground)
+        .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Column(Modifier.weight(1f)) {
+                Eyebrow("Kraftentwicklung gesamt")
+                stats.gain?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(String.format(Locale.GERMANY, "%+.0f %%", it), fontSize = 38.sp, fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = (-1).sp, lineHeight = 40.sp, color = color)
+                }
+            }
+            if (stats.gain != null) Text("Start = 100 %\ngeschätztes 1RM", color = SubtleText, fontSize = 12.sp,
+                lineHeight = 15.sp, modifier = Modifier.padding(bottom = 4.dp))
+        }
+        if (stats.strength.size < 2) Text("Sichtbar ab zwei Trainings mit Gewichtsangabe.", color = SubtleText, fontSize = 12.sp)
+        else StrengthChart(stats, phases)
+    }
+}
+
+@Composable
+private fun StrengthChart(stats: OverallStats, phases: List<Phase>) {
+    val color = MaterialTheme.colorScheme.primary
+    val names = phases.associate { it.id to it.name }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        val points = remember(stats) { thinOut(stats.strength, 160) }
+        val dash = SubtleText.copy(alpha = .35f)
+        Canvas(Modifier.fillMaxWidth().height(140.dp)) {
+            val values = points.map { it.index }
+            val lo = min(values.min(), 100.0) - 2.0
+            val hi = max(values.max(), 100.0) + 2.0
+            val pad = 8.dp.toPx()
+            val step = (size.width - pad * 2) / (points.size - 1)
+            fun x(i: Int) = pad + i * step
+            fun y(v: Double) = pad + ((hi - v) / (hi - lo) * (size.height - pad * 2)).toFloat()
+            // Phasenstreifen
+            var start = 0
+            for (i in 1..points.size) {
+                if (i == points.size || points[i].phaseId != points[start].phaseId) {
+                    val left = if (start == 0) 0f else x(start) - step / 2
+                    val right = if (i == points.size) size.width else x(i - 1) + step / 2
+                    drawRect(color.copy(alpha = phaseAlpha(names[points[start].phaseId])),
+                        Offset(left, 0f), androidx.compose.ui.geometry.Size(right - left, size.height))
+                    start = i
+                }
+            }
+            drawLine(dash, Offset(0f, y(100.0)), Offset(size.width, y(100.0)), strokeWidth = 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 5.dp.toPx())))
+            val line = Path().apply { values.forEachIndexed { i, v -> if (i == 0) moveTo(x(i), y(v)) else lineTo(x(i), y(v)) } }
+            drawPath(line, color, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawCircle(color, radius = 6.dp.toPx(), center = Offset(x(values.lastIndex), y(values.last())))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(formatMonth(points.first().timestamp), color = SubtleText, fontSize = 11.sp)
+            Text(formatMonth(points.last().timestamp), color = SubtleText, fontSize = 11.sp)
+        }
+        val legend = listOf("Muskelausdauer", "Hypertrophie", "Muskelkraft").filter { n -> phases.any { it.name == n } }
+        if (legend.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            legend.forEach { n ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp)).background(FieldBackground)
+                        .background(color.copy(alpha = phaseAlpha(n) + .06f)))
+                    Spacer(Modifier.width(5.dp))
+                    Text(n, color = SubtleText, fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PhaseTypesCard(types: List<PhaseTypeStats>) {
+    val color = MaterialTheme.colorScheme.primary
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardBackground).padding(vertical = 4.dp)) {
+        types.forEachIndexed { i, t ->
+            if (i > 0) HorizontalDivider(color = FieldBackground)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(width = 12.dp, height = 34.dp).clip(RoundedCornerShape(4.dp)).background(FieldBackground)
+                    .background(color.copy(alpha = phaseAlpha(t.name) + .06f)))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(t.name, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${t.phases} ${if (t.phases == 1) "Phase" else "Phasen"} · ${t.workouts} Einheiten",
+                        fontSize = 12.sp, color = SubtleText)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(t.avgGain?.let { String.format(Locale.GERMANY, "%+.1f %%", it) } ?: "–",
+                        fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = color)
+                    Text("Ø pro Phase", fontSize = 11.sp, color = SubtleText)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BestLiftsCard(best: List<BestLift>) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardBackground).padding(vertical = 4.dp)) {
+        best.forEachIndexed { i, b ->
+            if (i > 0) HorizontalDivider(color = FieldBackground)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(b.name, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${if (b.bodyweight) "EK " else ""}${formatNumber(b.weight)} kg × ${b.reps} · ${formatMonthName(b.timestamp)}",
+                        fontSize = 12.sp, color = SubtleText)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("${formatNumber(Math.round(b.oneRm).toDouble())} kg", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("1RM geschätzt", fontSize = 11.sp, color = SubtleText)
+                }
+            }
+        }
+    }
+}
+
+private fun formatMonthName(timestamp: Long): String =
+    Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+        .format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.GERMANY))

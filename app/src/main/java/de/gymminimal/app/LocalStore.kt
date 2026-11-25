@@ -55,6 +55,11 @@ class LocalStore(private val context: Context) {
 
     private fun JSONObject.optBoolNull(key: String): Boolean? = if (has(key) && !isNull(key)) optBoolean(key) else null
     private fun JSONObject.optFinite(key: String): Double = optDouble(key, 0.0).takeIf { it.isFinite() && it >= 0 } ?: 0.0
+    fun loadWeighConfig(): WeighConfig = decodeWeighConfig(prefs.getString("weigh_config", null))
+    fun saveWeighConfig(config: WeighConfig) { prefs.edit().putString("weigh_config", encodeWeighConfig(config)).apply() }
+    fun weighSnoozed(): java.time.LocalDate? =
+        prefs.getString("weigh_snoozed", null)?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+    fun setWeighSnoozed(day: java.time.LocalDate) { prefs.edit().putString("weigh_snoozed", day.toString()).apply() }
     fun loadTabs(): TabConfig = decodeTabs(prefs.getString("tabs", null))
     fun saveTabs(config: TabConfig) { prefs.edit().putString("tabs", encodeTabs(config)).apply() }
 

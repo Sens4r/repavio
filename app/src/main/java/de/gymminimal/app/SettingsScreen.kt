@@ -35,6 +35,8 @@ fun SettingsScreen(
     onTabConfig: (TabConfig) -> Unit = {},
     newsEnabled: Boolean = true,
     onNewsEnabled: (Boolean) -> Unit = {},
+    weighConfig: WeighConfig = WeighConfig(),
+    onWeighConfig: (WeighConfig) -> Unit = {},
     onExport: () -> Unit,
     onImport: () -> Unit,
     onChooseFolder: () -> Unit,
@@ -202,6 +204,7 @@ fun SettingsScreen(
             }
             "bedienung" -> {
                 item { TabsCard(tabConfig, onTabConfig) }
+                item { WeighSettingsCard(weighConfig, onWeighConfig) }
                 item {
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
                         .background(CardBackground).padding(horizontal = 16.dp, vertical = 10.dp),

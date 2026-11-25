@@ -109,9 +109,10 @@ fun NeedScreen(profile: Profile, log: FoodLog, onGoal: (String) -> Unit, onOpenP
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Punktfarben aus dem System, auf dunklen Karten in jedem Farbschema sichtbar.
             MacroTile("Protein", result.proteinG, perKg(PROTEIN_G_PER_KG), scheme.primary, Modifier.weight(1f))
-            MacroTile("Fett", result.fatG, perKg(FAT_G_PER_KG), onContainer.copy(alpha = .55f), Modifier.weight(1f))
-            MacroTile("Kohlenh.", result.carbsG, "Rest", onContainer.copy(alpha = .25f), Modifier.weight(1f))
+            MacroTile("Fett", result.fatG, perKg(FAT_G_PER_KG), scheme.secondary, Modifier.weight(1f))
+            MacroTile("Kohlenh.", result.carbsG, "Rest", scheme.tertiary, Modifier.weight(1f))
         }
 
         WeightTrendCard(profile, t)
@@ -159,7 +160,7 @@ private fun MacroTile(label: String, grams: Int, detail: String, dot: Color, mod
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(dot))
             Spacer(Modifier.width(6.dp))
-            Text(label, fontSize = 12.sp, color = SubtleText, maxLines = 1)
+            Text(label, fontSize = 12.sp, color = SubtleText, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         Text(buildAnnotatedString {
             append("$grams")
@@ -241,7 +242,8 @@ private fun WeekCard(log: FoodLog, goalKcal: Int, today: java.time.LocalDate) {
             }, fontSize = 13.sp)
         }
         val maxKcal = maxOf(goalKcal.toDouble(), logged.maxOfOrNull { it.kcal } ?: 0.0) * 1.08
-        Box(Modifier.fillMaxWidth().height(96.dp)) {
+        // Höhe ergibt sich aus Balken (80 dp) und Tageskürzeln, nichts wird abgeschnitten.
+        Box(Modifier.fillMaxWidth()) {
             val goalFraction = (goalKcal / maxKcal).toFloat()
             androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(80.dp)) {
                 val yGoal = size.height * (1 - goalFraction)
@@ -249,7 +251,7 @@ private fun WeekCard(log: FoodLog, goalKcal: Int, today: java.time.LocalDate) {
                     androidx.compose.ui.geometry.Offset(size.width, yGoal), strokeWidth = 3f,
                     pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f)))
             }
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
                 days.forEachIndexed { i, d ->
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         val v = totals[i]
@@ -258,7 +260,7 @@ private fun WeekCard(log: FoodLog, goalKcal: Int, today: java.time.LocalDate) {
                                 .clip(RoundedCornerShape(7.dp)).background(if (d == today) scheme.primary else scheme.primaryContainer))
                         }
                         Spacer(Modifier.height(4.dp))
-                        Text(listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")[i], fontSize = 10.sp,
+                        Text(listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")[i], fontSize = 11.sp, lineHeight = 14.sp,
                             color = if (d == today) scheme.onSurface else SubtleText)
                     }
                 }

@@ -54,6 +54,7 @@ fun TrainingScreen(
     var phaseSummaryOpen by remember { mutableStateOf(false) }
     var finishConfirm by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf<String?>(null) }
+    var infoName by remember { mutableStateOf<String?>(null) }
     val plan = app.plan(selectedDay)
     val finishedThisWeek = hasWorkoutThisWeek(app, selectedDay, System.currentTimeMillis())
     val canFinish = plan.enabled && plan.exercises.isNotEmpty() && app.remainingInPhase > 0 && !finishedThisWeek &&
@@ -62,6 +63,11 @@ fun TrainingScreen(
     val focusActive = focus && app.phase.isConfigured && plan.enabled && plan.exercises.isNotEmpty()
     LaunchedEffect(focus, focusActive) { if (focus && !focusActive) onFocusChange(false) }
     BackHandler(enabled = focusActive) { onFocusChange(false) }
+    infoName?.let(::exerciseInfo)?.let { info ->
+        BackHandler { infoName = null }
+        ExerciseInfoScreen(info) { infoName = null }
+        return
+    }
 
     if (!app.phase.isConfigured) {
         Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -129,6 +135,7 @@ fun TrainingScreen(
                         data = app,
                         bodyKg = bodyKg,
                         onBands = { next -> update { state -> state.copy(bands = next) } },
+                        onInfo = { infoName = it },
                         onEdit = { editingExercise = exercise; addingAlternative = false; exerciseEditorOpen = true },
                         onAddAlternative = {
                             editingExercise = exercise
@@ -453,7 +460,7 @@ private fun WeekStrip(selected: Int, plans: List<DayPlan>, onSelect: (Int) -> Un
 @Composable
 private fun ExerciseTile(
     number: Int, exercise: Exercise, choice: ExerciseChoice, data: AppData, bodyKg: Double?,
-    onBands: (List<Band>) -> Unit,
+    onBands: (List<Band>) -> Unit, onInfo: (String) -> Unit,
     onEdit: () -> Unit, onAddAlternative: () -> Unit,
     onChoice: (ExerciseChoice) -> Unit, onValues: (String, Values) -> Unit
 ) {
@@ -482,8 +489,19 @@ private fun ExerciseTile(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(if (replaced) alternative!!.name else exercise.name,
-                    fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp, maxLines = 2)
+                val shownName = if (replaced) alternative!!.name else exercise.name
+                val hasInfo = remember(shownName) { exerciseInfo(shownName) != null }
+                // Name antippen öffnet die Übungsinfo (nur für bekannte Übungen, erkennbar am ⓘ).
+                Row(Modifier.then(if (hasInfo) Modifier.clip(RoundedCornerShape(8.dp))
+                    .clickable(onClickLabel = "Übungsinfo öffnen") { onInfo(shownName) } else Modifier),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text(shownName, fontSize = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp,
+                        maxLines = 2, modifier = Modifier.weight(1f, fill = false))
+                    if (hasInfo) {
+                        Spacer(Modifier.width(6.dp))
+                        Icon(Icons.Outlined.Info, null, tint = SubtleText, modifier = Modifier.size(16.dp))
+                    }
+                }
                 Spacer(Modifier.height(3.dp))
                 Text(if (replaced) "${alternative!!.sets} Sätze · ${alternative.rest} s Pause"
                     else "${exercise.sets} Sätze · ${exercise.rest} s Pause",
@@ -639,8 +657,9 @@ private fun BodyLoadSheet(name: String, load: BodyLoad, bands: List<Band>, bodyK
     val valid = mode != "band" || band != null
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBackground,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
-        Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 22.dp).verticalScroll(rememberScrollState()),
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 18.dp, end = 18.dp, bottom = 22.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column {
                 Text(name, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.3).sp)
