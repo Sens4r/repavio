@@ -451,7 +451,7 @@ private fun PortionSheet(
         amount != null && perUnit != null -> perUnit.scaled(amount)
         else -> null
     }
-    val step = if (amountUnit != "g") 0.5 else if (ml) 50.0 else 10.0
+    val step = when (amountUnit) { "g" -> if (ml) 50.0 else 10.0; "Stück" -> 1.0; else -> 0.5 }
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBackground,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
@@ -506,7 +506,8 @@ private fun PortionSheet(
                 val presets = if (amountUnit == "g") buildList {
                     add("100 $unit" to 100.0)
                     food?.portions?.forEach { add("${it.label} (${formatAmount(it.grams)} $unit)" to it.grams) }
-                } else listOf(0.5, 1.0, 2.0, 3.0).map { (if (it == 0.5) "½" else formatAmount(it)) + " $amountUnit" to it }
+                } else if (amountUnit == "Stück") listOf(1.0, 2.0, 3.0, 4.0).map { "${formatAmount(it)} Stück" to it }
+                else listOf(0.5, 1.0, 2.0, 3.0).map { (if (it == 0.5) "½" else formatAmount(it)) + " $amountUnit" to it }
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     presets.forEach { (label, value) ->
                         val active = parseNumber(amountText) == value
@@ -562,7 +563,7 @@ private fun UnitSelector(selected: String, baseUnit: String, food: Food?, onSele
     val scheme = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(FieldBackground).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        AMOUNT_UNITS.forEach { u ->
+        amountUnits(food).forEach { u ->
             val active = u == selected
             Column(Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(18.dp))
                 .background(if (active) scheme.primary else Color.Transparent).clickable { onSelect(u) },
@@ -571,6 +572,7 @@ private fun UnitSelector(selected: String, baseUnit: String, food: Food?, onSele
                 Text(if (u == "g") baseUnit else u, fontSize = 14.sp, color = color,
                     fontWeight = if (active) FontWeight.ExtraBold else FontWeight.SemiBold)
                 Text(if (u == "g") (if (baseUnit == "ml") "Milliliter" else "Gramm") else "${formatGrams(gramsPerUnit(food, u))} $baseUnit",
+                    maxLines = 1,
                     fontSize = 10.sp, color = color.copy(alpha = .8f))
             }
         }
@@ -651,17 +653,19 @@ private fun CustomFoodDialog(existing: Food?, onDismiss: () -> Unit, onSave: (Fo
     var portionAmount by remember { mutableStateOf(t(firstPortion?.grams)) }
     var tlText by remember { mutableStateOf(t(existing?.tl)) }
     var elText by remember { mutableStateOf(t(existing?.el)) }
+    var pieceText by remember { mutableStateOf(t(existing?.piece)) }
     var confirmDelete by remember { mutableStateOf(false) }
     // Leer = Richtwert 5 / 15.
     fun spoon(text: String) = if (text.isBlank()) null else parseNumber(text)
-    val spoonsOk = (tlText.isBlank() || spoon(tlText) != null) && (elText.isBlank() || spoon(elText) != null)
+    val spoonsOk = (tlText.isBlank() || spoon(tlText) != null) && (elText.isBlank() || spoon(elText) != null) &&
+        (pieceText.isBlank() || spoon(pieceText) != null)
 
     val numbers = listOf(kcal, protein, fat, carbs, fiber, sugar, salt).map(::optionalNumber)
     val portion = parseNumber(portionAmount)
     val food = if (numbers.any { it == null }) null else Food(existing?.id ?: newId("c:"), name.trim(),
         Nutrients(numbers[0]!!, numbers[1]!!, numbers[2]!!, numbers[3]!!, numbers[4]!!, numbers[5]!!, numbers[6]!!), ml,
         if (portionLabel.isNotBlank() && portion != null) listOf(FoodPortion(portionLabel.trim().take(30), portion))
-        else emptyList(), custom = true, tl = spoon(tlText), el = spoon(elText))
+        else emptyList(), custom = true, tl = spoon(tlText), el = spoon(elText), piece = spoon(pieceText))
     val portionOk = portionLabel.isBlank() && portionAmount.isBlank() || portionLabel.isNotBlank() && portion != null && portion > 0
     val valid = food != null && kcal.isNotBlank() && validCustomFood(food) && portionOk && spoonsOk
     val unit = if (ml) "ml" else "g"
@@ -701,10 +705,11 @@ private fun CustomFoodDialog(existing: Food?, onDismiss: () -> Unit, onSave: (Fo
                         singleLine = true, shape = RoundedCornerShape(14.dp), modifier = Modifier.weight(1.4f))
                     NumberField(portionAmount, { portionAmount = it }, unit, Modifier.weight(1f), isError = !portionOk)
                 }
-                Text("Löffel (optional, sonst 5 / 15 $unit)", fontSize = 12.sp, color = SubtleText)
+                Text("Löffel und Stück (optional; Löffel sonst 5 / 15 $unit)", fontSize = 12.sp, color = SubtleText)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumberField(tlText, { tlText = it }, "1 TL in $unit", Modifier.weight(1f), isError = tlText.isNotBlank() && spoon(tlText) == null)
-                    NumberField(elText, { elText = it }, "1 EL in $unit", Modifier.weight(1f), isError = elText.isNotBlank() && spoon(elText) == null)
+                    NumberField(tlText, { tlText = it }, "1 TL", Modifier.weight(1f), isError = tlText.isNotBlank() && spoon(tlText) == null)
+                    NumberField(elText, { elText = it }, "1 EL", Modifier.weight(1f), isError = elText.isNotBlank() && spoon(elText) == null)
+                    NumberField(pieceText, { pieceText = it }, "1 Stück", Modifier.weight(1f), isError = pieceText.isNotBlank() && spoon(pieceText) == null)
                 }
                 if (food != null && kcal.isNotBlank() && !validCustomFood(food) && name.isNotBlank()) {
                     Text("Werte prüfen: max. 950 kcal und zusammen max. 100 g Nährstoffe je 100 $unit.",

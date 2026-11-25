@@ -275,7 +275,7 @@ class ProfileStore(private val context: Context) {
             log.customFoods.forEach { f ->
                 put(JSONObject().apply {
                     put("id", f.id); put("n", f.name); put("ml", f.ml); put("v", nutrientsJson(f.per100))
-                    f.tl?.let { put("tl", it) }; f.el?.let { put("el", it) }
+                    f.tl?.let { put("tl", it) }; f.el?.let { put("el", it) }; f.piece?.let { put("pc", it) }
                     put("p", JSONArray().apply {
                         f.portions.forEach { p -> put(JSONObject().apply { put("l", p.label); put("g", p.grams) }) }
                     })
@@ -331,7 +331,7 @@ class ProfileStore(private val context: Context) {
                 }.orEmpty()
                 fun spoon(key: String) = if (o.has(key)) o.optDouble(key) else null
                 Food(o.optString("id").take(40), o.optString("n").take(60), per100, o.optBoolean("ml"),
-                    portions, custom = true, tl = spoon("tl"), el = spoon("el")).takeIf { it.id.startsWith("c:") && validCustomFood(it) }
+                    portions, custom = true, tl = spoon("tl"), el = spoon("el"), piece = spoon("pc")).takeIf { it.id.startsWith("c:") && validCustomFood(it) }
             }
         }.orEmpty()
         fun strings(name: String, max: Int) = j.optJSONArray(name)?.let { a ->

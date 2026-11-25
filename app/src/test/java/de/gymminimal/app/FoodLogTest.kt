@@ -38,6 +38,11 @@ class FoodLogTest {
         assertEquals(15.0, gramsPerUnit(null, "EL"), 0.0)
         assertEquals(1.0, gramsPerUnit(oil, "g"), 0.0)
         assertFalse(validCustomFood(Food("c:x", "X", Nutrients(kcal = 100.0), el = 500.0)))
+        val egg = BASE_FOODS.first { it.name == "Ei" }
+        assertEquals(55.0, gramsPerUnit(egg, "Stück"), 0.0)
+        assertTrue("Stück" in amountUnits(egg))
+        assertFalse("Stück" in amountUnits(oil))
+        assertTrue(BASE_FOODS.count { it.piece != null } >= 60)
     }
 
     @Test fun idsAreStable() {
