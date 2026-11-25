@@ -35,7 +35,7 @@ private val MuscleIdle = Color(0xFF3A3E46)
 /** Übungsinfo: beanspruchte Muskeln (vorne/hinten), Ausführung, häufige Fehler. Öffnet über den Namen der Übungskachel. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ExerciseInfoScreen(info: ExerciseInfo, onBack: () -> Unit) {
+fun ExerciseInfoScreen(info: ExerciseInfo, history: ExerciseHistory? = null, onBack: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val levels = remember(info) { regionLevels(info) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -50,6 +50,7 @@ fun ExerciseInfoScreen(info: ExerciseInfo, onBack: () -> Unit) {
                 Text(info.equipment, fontSize = 12.sp, color = SubtleText)
             }
         }
+        if (history != null && history.points.isNotEmpty()) HistoryCard(history)
         InfoCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 InfoEyebrow("Beanspruchte Muskeln", Modifier.weight(1f))
@@ -200,6 +201,56 @@ private fun DrawScope.drawPart(part: BodyPart, fill: Color, edge: Color) {
         is BodyPart.Shape -> {
             val path = PathParser().parsePathString(part.d).toPath()
             drawPath(path, fill); drawPath(path, edge, style = stroke)
+        }
+    }
+}
+
+
+private fun infoNum(v: Double) = String.format(Locale.GERMANY, if (v % 1.0 == 0.0) "%.0f" else "%.1f", v)
+
+/** „Dein Verlauf“: Bestwert (geschätztes 1RM), Kurve der letzten Einheiten, die letzten drei Einträge. */
+@Composable
+private fun HistoryCard(history: ExerciseHistory) {
+    val primary = MaterialTheme.colorScheme.primary
+    InfoCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            InfoEyebrow("Dein Verlauf", Modifier.weight(1f))
+            Text("alle Phasen · 1RM geschätzt", fontSize = 11.sp, color = SubtleText)
+        }
+        Row(verticalAlignment = Alignment.Bottom) {
+            Column(Modifier.weight(1f)) {
+                history.best?.let { b ->
+                    Text("Bestwert", fontSize = 12.sp, color = SubtleText)
+                    Text("${infoNum(Math.round(b.oneRm!!).toDouble())} kg", fontSize = 30.sp, fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = (-0.8).sp, lineHeight = 32.sp)
+                    Text("${loggedValueText(b.entry)} · ${java.time.Instant.ofEpochMilli(b.timestamp).atZone(java.time.ZoneId.systemDefault())
+                        .format(java.time.format.DateTimeFormatter.ofPattern("MMM yyyy", Locale.GERMANY))}", fontSize = 12.sp, color = InfoBody)
+                } ?: Text("Noch ohne Gewichtsangabe", fontSize = 13.sp, color = SubtleText)
+            }
+            val values = history.points.mapNotNull { it.oneRm }.takeLast(12)
+            if (values.size >= 2) Canvas(Modifier.size(width = 150.dp, height = 60.dp)) {
+                val lo = values.min(); val hi = values.max()
+                val pad = 5.dp.toPx()
+                fun x(i: Int) = pad + i * (size.width - pad * 2) / (values.size - 1)
+                fun y(v: Double) = pad + ((hi - v) / (hi - lo).coerceAtLeast(.1) * (size.height - pad * 2)).toFloat()
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    values.forEachIndexed { i, v -> if (i == 0) moveTo(x(i), y(v)) else lineTo(x(i), y(v)) }
+                }
+                drawPath(path, primary, style = Stroke(width = 2.6.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    join = androidx.compose.ui.graphics.StrokeJoin.Round))
+                drawCircle(primary, 4.5.dp.toPx(), Offset(x(values.lastIndex), y(values.last())))
+            }
+        }
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(FieldBackground).padding(horizontal = 12.dp)) {
+            history.points.takeLast(3).asReversed().forEachIndexed { i, p ->
+                if (i > 0) HorizontalDivider(color = CardBackground)
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Text(java.time.Instant.ofEpochMilli(p.timestamp).atZone(java.time.ZoneId.systemDefault())
+                        .format(java.time.format.DateTimeFormatter.ofPattern("EE, dd.MM.yy", Locale.GERMANY)),
+                        fontSize = 13.sp, color = SubtleText, modifier = Modifier.weight(1f))
+                    Text(loggedValueText(p.entry), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }

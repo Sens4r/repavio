@@ -210,7 +210,9 @@ data class AppData(
     val pastPhases: List<Phase> = emptyList(),
     val customTags: List<String> = emptyList(),
     val exerciseCatalog: List<ExerciseDefinition> = emptyList(),
-    val bands: List<Band> = emptyList()
+    val bands: List<Band> = emptyList(),
+    /** Notiz je Übung (Schlüssel: normalisierter Name), z. B. Geräteeinstellung. */
+    val notes: Map<String, String> = emptyMap()
 ) {
     val completedInPhase: Int get() = history.count { it.phaseId == phase.id }
     val remainingInPhase: Int get() = if (phase.openEnded) Int.MAX_VALUE
@@ -256,11 +258,16 @@ fun withSelectedDays(plans: List<DayPlan>, selected: Set<Int>): List<DayPlan> =
 
 // Keep the weekday split (days / muscle groups), start the new phase with empty exercises.
 // Historical workouts are untouched; old phase sessions remain associated with their phase ID.
-fun beginNewPhase(data: AppData, phase: Phase, selected: Set<Int>, timestamp: Long = System.currentTimeMillis()): AppData = data.copy(
+// Optional werden ausgewählte Übungen mit neuen Startwerten übernommen (CarryOver).
+fun beginNewPhase(data: AppData, phase: Phase, selected: Set<Int>, timestamp: Long = System.currentTimeMillis(),
+                  carry: List<CarryOver> = emptyList()): AppData = data.copy(
     phase = phase.copy(unitsPerWeek = selected.size, finishedAt = null),
     pastPhases = if (data.phase.isConfigured) data.pastPhases + data.phase.copy(archivedAt = timestamp)
         else data.pastPhases,
-    plans = withSelectedDays(data.plans, selected).map { it.copy(exercises = emptyList()) },
+    plans = withSelectedDays(data.plans, selected).map { plan ->
+        plan.copy(exercises = carry.filter { it.day == plan.day && plan.day in selected }
+            .map { it.exercise.copy(weight = it.weight, reps = it.reps) })
+    },
     choices = emptyMap(),
     drafts = emptyMap()
 )

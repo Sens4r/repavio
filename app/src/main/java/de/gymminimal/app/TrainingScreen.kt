@@ -42,7 +42,8 @@ fun TrainingScreen(
     app: AppData, update: ((AppData) -> AppData) -> Unit,
     focus: Boolean = false, onFocusChange: (Boolean) -> Unit = {},
     stopwatchTile: (@Composable () -> Unit)? = null, onWorkoutSaved: () -> Unit = {},
-    bodyKg: Double? = null, workoutDuration: () -> Long? = { null }
+    bodyKg: Double? = null, workoutDuration: () -> Long? = { null },
+    summaryEnabled: Boolean = true, onSummaryDisabled: () -> Unit = {}
 ) {
     var selectedDay by remember { mutableIntStateOf((java.time.LocalDate.now().dayOfWeek.value - 1).coerceIn(0, 6)) }
     var editingExercise by remember { mutableStateOf<Exercise?>(null) }
@@ -55,6 +56,8 @@ fun TrainingScreen(
     var finishConfirm by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf<String?>(null) }
     var infoName by remember { mutableStateOf<String?>(null) }
+    var summary by remember { mutableStateOf<WorkoutSummary?>(null) }
+    val undo = LocalUndo.current
     val plan = app.plan(selectedDay)
     val finishedThisWeek = hasWorkoutThisWeek(app, selectedDay, System.currentTimeMillis())
     val canFinish = plan.enabled && plan.exercises.isNotEmpty() && app.remainingInPhase > 0 && !finishedThisWeek &&
@@ -65,7 +68,7 @@ fun TrainingScreen(
     BackHandler(enabled = focusActive) { onFocusChange(false) }
     infoName?.let(::exerciseInfo)?.let { info ->
         BackHandler { infoName = null }
-        ExerciseInfoScreen(info) { infoName = null }
+        ExerciseInfoScreen(info, remember(app.history, info.name) { exerciseHistory(app, info.name) }) { infoName = null }
         return
     }
 
@@ -89,8 +92,8 @@ fun TrainingScreen(
                     update { it.copy(phase = phase, plans = withSelectedDays(it.plans, days)) }
                     phaseEditorOpen = false
                 },
-                onNew = { phase, days ->
-                    update { beginNewPhase(it, phase, days) }
+                onNew = { phase, days, carry ->
+                    update { beginNewPhase(it, phase, days, carry = carry) }
                     phaseEditorOpen = false
                 }, startWithNew = true)
         }
@@ -224,12 +227,22 @@ fun TrainingScreen(
                 exerciseEditorOpen = false
                 addingAlternative = false
             },
+            initialNote = editingExercise?.let { noteFor(app, it.name) } ?: "",
+            onNote = { n, note -> update { setNote(it, n, note) } },
             onDelete = editingExercise?.let { old ->
                 {
+                    val day = selectedDay
+                    val index = app.plan(day).exercises.indexOfFirst { it.id == old.id }
                     update { state -> state.copy(plans = state.plans.map { p ->
-                        if (p.day == selectedDay) p.copy(exercises = p.exercises.filterNot { it.id == old.id }) else p
+                        if (p.day == day) p.copy(exercises = p.exercises.filterNot { it.id == old.id }) else p
                     }, choices = state.choices - old.id,
                         drafts = state.drafts - (listOf(old.id) + old.alternatives.map { it.id }).toSet()) }
+                    undo?.offer("„${old.name}“ entfernt") {
+                        update { state -> state.copy(plans = state.plans.map { p ->
+                            if (p.day != day || p.exercises.any { it.id == old.id }) p
+                            else p.copy(exercises = p.exercises.toMutableList().apply { add(index.coerceIn(0, size), old) })
+                        }) }
+                    }
                     exerciseEditorOpen = false
                     addingAlternative = false
                 }
@@ -269,8 +282,8 @@ fun TrainingScreen(
             update { it.copy(phase = phase, plans = withSelectedDays(it.plans, days)) }
             phaseEditorOpen = false
             newPhaseEditor = false
-        }, onNew = { phase, days ->
-            update { beginNewPhase(it, phase, days) }
+        }, onNew = { phase, days, carry ->
+            update { beginNewPhase(it, phase, days, carry = carry) }
             phaseEditorOpen = false
             newPhaseEditor = false
         }, startWithNew = newPhaseEditor)
@@ -299,7 +312,8 @@ fun TrainingScreen(
                     if (result != null) {
                         update { result }
                         onWorkoutSaved()
-                        feedback = "Training gespeichert."
+                        if (summaryEnabled) summary = workoutSummary(result, result.history.last())
+                        else feedback = "Training gespeichert."
                     } else {
                         feedback = "Bitte Gewichte und Wiederholungen prüfen."
                     }
@@ -308,6 +322,12 @@ fun TrainingScreen(
             },
             dismissButton = { TextButton(onClick = { finishConfirm = false }) { Text("Abbrechen") } }
         )
+    }
+    summary?.let { s ->
+        WorkoutSummaryDialog(s, dayName = WEEKDAY_LONG[selectedDay]) { never ->
+            if (never) onSummaryDisabled()
+            summary = null
+        }
     }
 }
 
@@ -519,6 +539,14 @@ private fun ExerciseTile(
                     modifier = Modifier.size(21.dp))
             }
         }
+        noteFor(data, if (replaced) alternative!!.name else exercise.name)?.let { note ->
+            Row(Modifier.padding(top = 10.dp, end = 6.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(FieldBackground).padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.Top) {
+                Icon(Icons.Outlined.StickyNote2, null, tint = scheme.primary, modifier = Modifier.size(15.dp).padding(top = 1.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(note, fontSize = 13.sp, lineHeight = 18.sp, color = Color(0xFFD2D5DC))
+            }
+        }
         if (unavailable) {
             Text("Nicht ausgeführt", color = SubtleText, fontSize = 13.sp,
                 modifier = Modifier.padding(start = 52.dp, top = 8.dp))
@@ -647,6 +675,9 @@ private fun BodyLoadSheet(name: String, load: BodyLoad, bands: List<Band>, bodyK
     var extra by remember { mutableDoubleStateOf(if (load.extraKg > 0) load.extraKg else 10.0) }
     var bandId by remember { mutableStateOf(load.bandId.takeIf { id -> bands.any { it.id == id } } ?: bands.minByOrNull { it.kg }?.id.orEmpty()) }
     var form by remember { mutableStateOf<Band?>(null) }
+    // Rückgängig direkt im Sheet (eine Snackbar läge hinter dem Sheet).
+    var deletedBand by remember { mutableStateOf<Band?>(null) }
+    val latestBands by rememberUpdatedState(bands)
     val body = bodyKg?.takeIf { it > 0 } ?: 0.0
     val band = bands.firstOrNull { it.id == bandId }
     val (effective, formula, chip) = when {
@@ -730,6 +761,7 @@ private fun BodyLoadSheet(name: String, load: BodyLoad, bands: List<Band>, bodyK
                             onDelete = {
                                 onBands(bands.filterNot { it.id == editing.id })
                                 if (bandId == editing.id) bandId = ""
+                                deletedBand = editing
                                 form = null
                             },
                             onSave = { saved ->
@@ -737,6 +769,17 @@ private fun BodyLoadSheet(name: String, load: BodyLoad, bands: List<Band>, bodyK
                                 bandId = saved.id; form = null
                             })
                     }
+                }
+            }
+            deletedBand?.let { gone ->
+                LaunchedEffect(gone) { kotlinx.coroutines.delay(6000); if (deletedBand == gone) deletedBand = null }
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFE2E2E9))
+                    .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Band „${gone.color}“ gelöscht", fontSize = 14.sp, color = Color(0xFF1B1D22), modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        if (latestBands.none { it.id == gone.id }) onBands(latestBands + gone)
+                        deletedBand = null
+                    }) { Text("Rückgängig", fontWeight = FontWeight.ExtraBold, color = scheme.inversePrimary) }
                 }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.Bottom) {
@@ -837,6 +880,7 @@ private fun SwipeNumberField(
     // Finger travel per step. 11 dp (up to V1.3.6) was reported as too sensitive.
     val stepPx = with(LocalDensity.current) { 22.dp.toPx() }
     val sounds = LocalRepavioSounds.current
+    val view = androidx.compose.ui.platform.LocalView.current
     var accumulated by remember { mutableFloatStateOf(0f) }
     var dragNumber by remember { mutableDoubleStateOf(0.0) }
     Row(modifier.height(52.dp).clip(RoundedCornerShape(16.dp)).background(FieldBackground)
@@ -857,7 +901,7 @@ private fun SwipeNumberField(
                             .coerceAtLeast(if (integer) 1.0 else 0.0)
                         val formatted = if (dragNumber % 1.0 == 0.0) dragNumber.toInt().toString()
                             else String.format(Locale.GERMANY, "%.1f", dragNumber)
-                        if (formatted != currentValue) sounds?.tick()
+                        if (formatted != currentValue) sounds?.tick(view, strong = !integer && dragNumber % 10.0 == 0.0)
                         currentOnChange(formatted)
                     }
                 }

@@ -17,6 +17,13 @@ Antworten auf Deutsch, direkt und sachlich, ohne Gendersprache. Der Nutzer entsc
 - Übungsinfo (seit V1.6.0, `ExerciseCatalog.kt`, `ExerciseInfoScreen.kt`): Katalog für alle `EXERCISE_SUGGESTIONS` (Test erzwingt Vollständigkeit) mit Haupt-/Mitmuskeln, Ausführung, häufigen Fehlern; Aliasse mit `=`. Muskelkarte im ersten, vereinfachten Vorschau-Design (Ellipsen/Rechtecke, vorne/hinten, ohne Geschlecht); detailliertere/„menschliche“ Figuren wurden vom Nutzer abgelehnt, KI-Bilder bisher nicht eingebaut. Öffnet über den Übungsnamen (ⓘ). Keine Bewegungsbilder (vom Nutzer so entschieden).
 - Analyse „Alle Phasen“ (seit V1.6.0, `Overall.kt`): Kraftindex über geschätztes 1RM (Epley), Übungen über den Namen zusammengeführt, Phasenstreifen nach Phasentyp, Phasen im Vergleich (Ø Zuwachs je Phase), Bestwerte, Zuwachs je Muskelgruppe.
 - Gewichtsabfrage (seit V1.6.0, `Weighing.kt`, `WeighDialog.kt`): Pop-up beim Öffnen, wenn fällig (aus/täglich/3 Tage/wöchentlich/2 Wochen, Wochentag; Standard wöchentlich montags), nur wenn schon ein Gewicht im Profil steht; „Heute nicht“ gilt für den Tag. Einstellung in `LocalStore` (`weigh_config`, `weigh_snoozed`), nicht im Backup.
+- Neue Phase mit Startgewichten (seit V1.6.1, `Summary.kt` `carryOverSuggestions`): Übungen der gewählten Tage optional übernehmen; Gewicht = Epley-1RM der letzten Einheit ÷ (1 + Wdh./30), Start-Wdh. Ausdauer 15 / Hypertrophie 10 / Kraft 5, abgerundet 2,5 kg (unter 20 kg 1 kg); EK behält Belastung und Wdh.
+- Notiz pro Übung (seit V1.6.1): `AppData.notes` (Schlüssel = normalisierter Name, max. 120 Zeichen), im Backup, in der Kachel über die volle Breite.
+- Bilanz nach dem Training (seit V1.6.1, `workoutSummary`, `SummaryDialog.kt`): Dauer/Volumen zur letzten Einheit desselben Wochentags, Änderung je Übung, neuer Bestwert (1RM); abschaltbar (`summary_disabled`). Steigerungen in `primary`, kein Rot.
+- Übungsinfo „Dein Verlauf“ (seit V1.6.1): Bestwert, Kurve der letzten 12 Einheiten, letzte 3 Einträge.
+- Tagebuch „Tag übernehmen“ (seit V1.6.1, `copyDay`): Karte „Wie gestern?“ nur an leeren Tagen, sonst über ⋮; Mahlzeiten wählbar, Wasser optional; Einträge kommen dazu. Kein Wochenschnitt (vom Nutzer abgelehnt).
+- Rückgängig statt Nachfrage (seit V1.6.1, `Undo.kt`, Snackbar): Tagebuch-Einträge, eigene Lebensmittel, Rezepte, Gewichtseinträge, Übungen; Bänder mit Rückgängig-Zeile im Sheet. Endgültiges (Phase löschen, Zurücksetzen, Backup-Import, Profil) fragt weiter nach.
+- Rückmeldung beim Wischen (seit V1.6.1, `RepavioSounds`): Ton/Vibration/Beides/Aus (`swipe_feedback`, alter Schalter `sounds_enabled` wird übernommen), Stärke leicht/mittel/kräftig über `performHapticFeedback` (folgt Systemeinstellung). Reines Schwarz (`pure_black`). Keine Kompaktansicht im Vollbild (abgelehnt).
 - Bottom-Sheets immer mit `skipPartiallyExpanded = true` und scrollbarem Inhalt; keine festen Höhen für Inhalte mit Text (Textgröße auf dem Pixel ist größer als im Emulator).
 - Tabs (seit V1.5.0): Reihenfolge und Ausblenden unter Profil → Bedienung, gespeichert in `LocalStore` (`tabs`, nicht im Backup). Profil nie ausblendbar.
 - Alternativübungen sind nur Ersatz, kein zusätzlicher Block.
@@ -82,6 +89,7 @@ Nur `Sens4r/repavio` verändern. Vor Updates, die Daten betreffen, ein externes 
 | 1.5.2 | 24.11.2026 | Vorschau-Änderungen: Prognose im Feld (grün/rot), Bänder direkt in der Übung mit Spanne lb/kg, Stoppuhr ohne Statuszeile, Neuigkeiten-Pop-up statt Einführung |
 | 1.5.3 | 25.11.2026 | Bedarf & Trend (adaptiver Bedarf, Stufe 3), Mengen in TL/EL/Stück (Tagebuch, Rezept-Zutaten, eigene Lebensmittel), Grundliste über 200 Einträge mit TL/EL, Neuigkeiten-Pop-up besser lesbar; auf dem Pixel installiert, Darstellungsfehler gemeldet → 1.5.4 |
 | 1.5.4 | 25.11.2026 | Bugfix (Bottom-Sheets, Einheiten-Auswahl, Wochenbalken, Makro-Punktfarben); nicht einzeln veröffentlicht, in 1.6.0 enthalten |
-| 1.6.0 | 25.11.2026 | Übungsinfo für alle Vorschlagsübungen, Analyse über alle Phasen, Gewichtsabfrage mit Häufigkeit, Neuigkeiten mit Versionsverlauf; auf dem Pixel noch nicht bestätigt |
+| 1.6.0 | 25.11.2026 | Übungsinfo für alle Vorschlagsübungen, Analyse über alle Phasen, Gewichtsabfrage mit Häufigkeit, Neuigkeiten mit Versionsverlauf; auf dem Pixel und einem Huawei Mate 20 bestätigt |
+| 1.6.1 | 25.11.2026 | Startgewichte für neue Phase, Notiz pro Übung, Bilanz nach dem Training, „Dein Verlauf“, Tag übernehmen, Rückgängig statt Nachfrage, Vibration beim Wischen, reines Schwarz; auf dem Pixel noch nicht bestätigt |
 
-Offen: nichts Geplantes. Ungetestet sind Android 8/9 (Browser-Fallback) und Geräte anderer Hersteller.
+Offen: nichts Geplantes. Ungetestet ist Android 8/9 (Browser-Fallback); Huawei Mate 20 mit 1.6.0 bestätigt.

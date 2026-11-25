@@ -109,6 +109,15 @@ fun copyMeal(log: FoodLog, fromDay: String, toDay: String, meal: Int, newId: (In
     return log.copy(entries = log.entries + source.mapIndexed { i, e -> e.copy(id = newId(i), day = toDay) })
 }
 
+/** Übernimmt ausgewählte Mahlzeiten (und auf Wunsch das Wasser) eines Tages; vorhandene Einträge bleiben. */
+fun copyDay(log: FoodLog, fromDay: String, toDay: String, meals: Set<Int>, water: Boolean, newId: (Int) -> String): FoodLog {
+    if (fromDay == toDay) return log
+    val source = dayEntries(log, fromDay).filter { it.meal in meals }
+    val withEntries = log.copy(entries = log.entries + source.mapIndexed { i, e -> e.copy(id = newId(i), day = toDay) })
+    val ml = log.water[fromDay] ?: 0
+    return if (water && ml > 0) addWater(withEntries, toDay, ml) else withEntries
+}
+
 fun addWater(log: FoodLog, day: String, deltaMl: Int): FoodLog {
     val next = ((log.water[day] ?: 0) + deltaMl).coerceIn(0, 10_000)
     return log.copy(water = if (next == 0) log.water - day else log.water + (day to next))

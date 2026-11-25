@@ -25,6 +25,12 @@ import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.StickyNote2
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Undo
+import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.ui.graphics.Color
@@ -85,6 +91,14 @@ val RELEASE_NEWS = listOf(
         NewsItem("insights", "Alle Phasen", "In der Analyse: Kraftentwicklung über alle Phasen, Phasen im Vergleich und Bestwerte."),
         NewsItem("scale", "Gewichtsabfrage", "Erinnert ans Wiegen, mit Verlauf. Häufigkeit unter Profil → Bedienung."),
         NewsItem("history", "Versionsverlauf", "Hier mit ‹ › durch frühere Versionen blättern.")
+    )),
+    ReleaseNews("1.6.1", "Neu in repavio", listOf(
+        NewsItem("start", "Startgewichte", "Neue Phase: Übungen übernehmen, Gewichte passend zum Wiederholungsbereich."),
+        NewsItem("note", "Notiz pro Übung", "Sitz, Griff, Stufe – steht direkt in der Kachel."),
+        NewsItem("trophy", "Bilanz & Verlauf", "Nach dem Training ein kurzer Vergleich, in der Übungsinfo dein Verlauf."),
+        NewsItem("copy", "Tag übernehmen", "Im Tagebuch Mahlzeiten von gestern oder einem anderen Tag übernehmen."),
+        NewsItem("undo", "Rückgängig", "Löschen ohne Nachfrage – kurz „Rückgängig“ antippen."),
+        NewsItem("vib", "Vibration & Schwarz", "Wischen mit Vibration, reines Schwarz für OLED. Unter Profil → Bedienung.")
     ))
 )
 
@@ -134,6 +148,12 @@ private fun newsIcon(key: String): ImageVector = when (key) {
     "info" -> Icons.Outlined.Info
     "insights" -> Icons.Outlined.Insights
     "history" -> Icons.Outlined.History
+    "start" -> Icons.Outlined.Flag
+    "note" -> Icons.Outlined.StickyNote2
+    "trophy" -> Icons.Outlined.EmojiEvents
+    "copy" -> Icons.Outlined.ContentCopy
+    "undo" -> Icons.Outlined.Undo
+    "vib" -> Icons.Outlined.Vibration
     else -> Icons.Outlined.NewReleases
 }
 
