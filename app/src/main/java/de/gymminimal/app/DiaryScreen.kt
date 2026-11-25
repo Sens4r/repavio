@@ -78,7 +78,7 @@ fun NutritionScreen(
     when {
         showNeed -> {
             BackHandler { showNeed = false }
-            NeedScreen(profile, onGoal, onOpenProfile, onBack = { showNeed = false })
+            NeedScreen(profile, log, onGoal, onOpenProfile, onBack = { showNeed = false })
         }
         addMeal >= 0 -> {
             BackHandler { addMeal = -1 }
@@ -97,7 +97,8 @@ private fun DiaryPage(
 ) {
     val scheme = MaterialTheme.colorScheme
     val day = dayKey(date)
-    val need = nutritionFor(profile)
+    val target = remember(profile, log) { nutritionTarget(profile, log) }
+    val need = target?.result
     val total = dayTotals(log, day)
     var editing by remember { mutableStateOf<DiaryEntry?>(null) }
 
@@ -136,7 +137,8 @@ private fun DiaryPage(
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     if (need != null) Text("${kcalText(total.kcal)} gegessen", color = onC.copy(alpha = .85f), fontSize = 12.sp)
-                    Text(if (need != null) "Ziel ${kcalText(need.kcal.toDouble())} ›" else "Ziel festlegen ›",
+                    Text(if (need != null) (if (target?.adaptive == true) "Ziel ${kcalText(need.kcal.toDouble())} · angepasst ›"
+                        else "Ziel ${kcalText(need.kcal.toDouble())} ›") else "Ziel festlegen ›",
                         color = onC, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onNeed).padding(4.dp))
                 }

@@ -44,6 +44,7 @@ val RELEASE_NEWS = listOf(
         NewsItem("tabs", "Tabs anpassen", "Unter Profil → Bedienung ausblenden und sortieren.")
     )),
     ReleaseNews("1.5.3", "Neu in repavio", listOf(
+        NewsItem("trend", "Bedarf & Trend", "Ab zwei Wochen Daten passt sich dein Kalorienziel wöchentlich an deinen echten Verbrauch an."),
         NewsItem("spoon", "Löffel & Stück", "Mengen auch in TL, EL oder Stück eintragen – im Tagebuch und bei Rezepten."),
         NewsItem("list", "Mehr Lebensmittel", "Über 200 Lebensmittel in der Grundliste, jedes mit Gramm je TL und EL.")
     ))
