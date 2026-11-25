@@ -145,6 +145,9 @@ fun RepavioApp() {
     var restoreBusy by remember { mutableStateOf(false) }
     var restoreFailed by remember { mutableStateOf(false) }
     val updateProfile: (Profile) -> Unit = { next -> profile = next; profileStore.save(next) }
+    var weighConfig by remember { mutableStateOf(store.loadWeighConfig()) }
+    // Einmal beim Start geprüft; erscheint erst, wenn keine anderen Pop-ups offen sind.
+    var weighPrompt by remember { mutableStateOf(weighDue(weighConfig, profile.weights, java.time.LocalDate.now(), store.weighSnoozed())) }
     val scope = rememberCoroutineScope()
     var availableUpdate by remember { mutableStateOf<RepavioRelease?>(null) }
     var checkingUpdates by remember { mutableStateOf(false) }
@@ -259,6 +262,8 @@ fun RepavioApp() {
                         tabConfig = tabConfig,
                         newsEnabled = newsEnabled,
                         onNewsEnabled = { on -> newsEnabled = on; store.setNewsDisabled(!on) },
+                        weighConfig = weighConfig,
+                        onWeighConfig = { next -> weighConfig = next; store.saveWeighConfig(next) },
                         onTabConfig = { next -> tabConfig = sanitizeTabs(next); store.saveTabs(tabConfig) },
                         onExport = { exportLauncher.launch("repavio_Backup.json") },
                         onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
@@ -472,11 +477,20 @@ fun RepavioApp() {
             )
         }
         if (pendingNews.isNotEmpty() && !showingBrand && !resetRequested) {
-            NewsDialog(pendingNews) { neverAgain ->
+            NewsDialog(pendingNews, currentVersion) { neverAgain ->
                 store.setNewsSeen(currentVersion)
                 if (neverAgain) { store.setNewsDisabled(true); newsEnabled = false }
                 pendingNews = emptyList()
             }
+        }
+        if (weighPrompt && pendingNews.isEmpty() && availableUpdate == null && pendingImport == null &&
+            pendingProfileBlob == null && !showingBrand && !resetRequested) {
+            WeighDialog(profile.weights, weighConfig, java.time.LocalDate.now(),
+                onSave = { kg ->
+                    addWeight(profile, kg, System.currentTimeMillis())?.let(updateProfile)
+                    weighPrompt = false
+                },
+                onLater = { store.setWeighSnoozed(java.time.LocalDate.now()); weighPrompt = false })
         }
         if (showingBrand) {
             Box(Modifier.fillMaxSize().background(ScreenBackground), contentAlignment = Alignment.Center) {
